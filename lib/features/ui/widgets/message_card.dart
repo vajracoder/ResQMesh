@@ -186,6 +186,35 @@ class MessageCard extends StatelessWidget {
             'ID: ${message.messageId.length > 20 ? "${message.messageId.substring(0, 16)}..." : message.messageId} • Sender: ${message.senderNodeId.length > 16 ? "${message.senderNodeId.substring(0, 14)}..." : message.senderNodeId}',
             style: const TextStyle(fontSize: 10, fontFamily: 'monospace', color: AppTheme.textMuted),
           ),
+          if (message.forwardingHistory.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: const Color(0xFF101622),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: AppTheme.meshCyan.withValues(alpha: 0.3)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.alt_route, size: 12, color: AppTheme.meshCyan),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      'Path: ${message.originNodeId.length > 8 ? "${message.originNodeId.substring(0, 8)}…" : message.originNodeId} → ${message.forwardingHistory.map((h) => h.relayNodeId.length > 8 ? "${h.relayNodeId.substring(0, 8)}…" : h.relayNodeId).join(" → ")}',
+                      style: const TextStyle(
+                        fontSize: 10,
+                        color: AppTheme.meshCyan,
+                        fontFamily: 'monospace',
+                        fontWeight: FontWeight.w600,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );

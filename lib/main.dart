@@ -13,6 +13,7 @@ import 'features/identity/repositories/shared_prefs_node_identity_repository.dar
 import 'features/identity/services/node_identity_service.dart';
 import 'features/mesh/message_manager.dart';
 import 'features/routing/ble_dtn_router.dart';
+import 'features/routing/models/relay_metrics.dart';
 import 'features/storage/repositories/dtn_message_repository.dart';
 import 'features/storage/repositories/sqlite_dtn_message_repository.dart';
 import 'features/transport/ble_transport.dart';
@@ -102,6 +103,7 @@ Future<void> main() async {
         ChangeNotifierProvider<BleDiscoveryService>.value(value: discoveryService),
         ChangeNotifierProvider<BleTransport>.value(value: bleTransport),
         ChangeNotifierProvider<MessageManager>.value(value: messageManager),
+        ChangeNotifierProvider<RelayMetrics>.value(value: messageManager.relayMetrics),
         Provider<DtnMessageRepository>.value(value: messageRepository),
       ],
       child: const ResQMeshApp(),

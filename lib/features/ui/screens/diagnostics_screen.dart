@@ -10,6 +10,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../discovery/ble_discovery_service.dart';
 import '../../identity/services/node_identity_service.dart';
 import '../../mesh/message_manager.dart';
+import '../../routing/models/relay_metrics.dart';
 
 /// Screen detailing the ResQMesh system status, persistent Node Identity,
 /// local SQLite DTN storage statistics, BLE peer discovery, and offline core path pipeline.
@@ -119,6 +120,7 @@ class DiagnosticsScreen extends StatelessWidget {
     final manager = context.watch<MessageManager>();
     final identityService = context.watch<NodeIdentityService>();
     final bleService = context.watch<BleDiscoveryService?>();
+    final relayMetrics = context.watch<RelayMetrics?>() ?? manager.relayMetrics;
     final identity = identityService.identity;
 
     final isAndroid = !kIsWeb && Platform.isAndroid;
@@ -172,22 +174,22 @@ class DiagnosticsScreen extends StatelessWidget {
       const _ArchStep(
         title: 'DTN Router',
         subtitle: 'Opportunistic Store-and-Forward bundle routing',
-        status: 'In-Memory Queue (Step 3/7)',
+        status: 'Active (Step 6)',
         isActive: true,
         icon: Icons.swap_calls_rounded,
       ),
       const _ArchStep(
         title: 'BLE Local Communication',
         subtitle: 'GATT / L2CAP physical transmission without Internet',
-        status: 'Scheduled (Step 6)',
-        isActive: false,
+        status: 'Active (Step 5)',
+        isActive: true,
         icon: Icons.bluetooth_rounded,
       ),
       const _ArchStep(
         title: 'Nearby ResQMesh Nodes',
         subtitle: 'Multi-hop relay to reach survivors and medical hubs',
-        status: 'Mesh Target',
-        isActive: false,
+        status: 'Multi-Hop Relay Active (Step 6)',
+        isActive: true,
         icon: Icons.group_work_outlined,
       ),
     ];
@@ -737,6 +739,178 @@ class DiagnosticsScreen extends StatelessWidget {
                       }
                     },
                   ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 24),
+
+          // --------------------------------
+          // MULTI-HOP DTN RELAY (Step 6)
+          // --------------------------------
+          const Text(
+            'MULTI-HOP DTN RELAY',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.8,
+              color: AppTheme.textMuted,
+            ),
+          ),
+          const SizedBox(height: 10),
+
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppTheme.cardBackground,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: AppTheme.cardBorder),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Store-and-Forward Mode',
+                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textSecondary),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: AppTheme.activeGreen.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: const Text(
+                        'AUTONOMOUS RELAY',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                          color: AppTheme.activeGreen,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+
+                // Metrics grid
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildMetricTile(
+                        label: 'Waiting in Outbox',
+                        value: '${relayMetrics.messagesWaiting}',
+                        color: AppTheme.alertAmber,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _buildMetricTile(
+                        label: 'Hops Relayed',
+                        value: '${relayMetrics.messagesRelayed}',
+                        color: AppTheme.meshCyan,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildMetricTile(
+                        label: 'ACK Confirmed',
+                        value: '${relayMetrics.messagesDelivered}',
+                        color: AppTheme.activeGreen,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _buildMetricTile(
+                        label: 'Loops Prevented',
+                        value: '${relayMetrics.duplicatesPrevented}',
+                        color: AppTheme.textMuted,
+                      ),
+                    ),
+                  ],
+                ),
+                const Divider(height: 24),
+
+                // Routing parameters
+                Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Max Observed Hop',
+                            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textMuted),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '${relayMetrics.maxHopObserved} (Limit: ${AppConstants.maxHopCount})',
+                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppTheme.textPrimary),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Average Hop Count',
+                            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textMuted),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            relayMetrics.averageHopCount.toStringAsFixed(1),
+                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppTheme.meshCyan),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Sweep Interval',
+                            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textMuted),
+                          ),
+                          const SizedBox(height: 4),
+                          const Text(
+                            '${AppConstants.relaySchedulerIntervalSeconds}s (Opportunistic)',
+                            style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Min Link RSSI',
+                            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textMuted),
+                          ),
+                          const SizedBox(height: 4),
+                          const Text(
+                            '${AppConstants.minRelayRssi} dBm',
+                            style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),

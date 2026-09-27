@@ -6,7 +6,10 @@ import '../decision/decision_engine_interface.dart';
 import '../discovery/peer_discovery_interface.dart';
 import '../identity/models/node_role.dart';
 import '../identity/services/node_identity_service.dart';
+import '../routing/ble_dtn_router.dart';
 import '../routing/dtn_router_interface.dart';
+import '../routing/models/relay_metrics.dart';
+import '../routing/relay_scheduler.dart';
 import '../storage/repositories/dtn_message_repository.dart';
 import '../transport/ble_transport.dart';
 import '../transport/codecs/ble_message_wire_format.dart';
@@ -23,6 +26,8 @@ class MessageManager extends ChangeNotifier {
   final BleTransport? transport;
   final NodeIdentityService? identityService;
   final DtnMessageRepository? messageRepository;
+  final RelayScheduler? relayScheduler;
+  final RelayMetrics relayMetrics;
   final String _localNodeId;
   final _uuid = const Uuid();
 
@@ -41,9 +46,20 @@ class MessageManager extends ChangeNotifier {
     this.transport,
     this.identityService,
     this.messageRepository,
+    this.relayScheduler,
+    RelayMetrics? relayMetrics,
     String? localNodeId,
-  })  : _localNodeId = localNodeId ?? 'node-local-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}' {
+  })  : _localNodeId = localNodeId ?? 'node-local-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}',
+        relayMetrics = relayMetrics ??
+            (dtnRouter is BleDtnRouter ? dtnRouter.metrics : RelayMetrics()) {
     _init();
+  }
+
+  RelayScheduler? get _effectiveScheduler {
+    if (relayScheduler != null) return relayScheduler;
+    final router = dtnRouter;
+    if (router is BleDtnRouter) return router.relayScheduler;
+    return null;
   }
 
   void _init() {
@@ -53,6 +69,11 @@ class MessageManager extends ChangeNotifier {
       dtnRouter.onPeersUpdated(peers);
       notifyListeners();
     });
+
+    final activeScheduler = _effectiveScheduler;
+    if (activeScheduler != null) {
+      activeScheduler.startPeriodicRelay(() => _currentPeers);
+    }
 
     if (transport != null) {
       _transportMessageSubscription = transport!.onMessageReceived.listen(_handleIncomingMessage);
@@ -81,12 +102,14 @@ class MessageManager extends ChangeNotifier {
     // 2. Duplicate protection: verify messageId does not already exist
     final alreadyInMemory = _messages.any((m) => m.messageId == message.messageId);
     if (alreadyInMemory) {
+      relayMetrics.recordDuplicatePrevented();
       return;
     }
 
     if (messageRepository != null) {
       final existingInDb = await messageRepository!.getMessageById(message.messageId);
       if (existingInDb != null) {
+        relayMetrics.recordDuplicatePrevented();
         return;
       }
     }
@@ -99,7 +122,20 @@ class MessageManager extends ChangeNotifier {
 
     // 4. Admit to local memory and notify UI
     _messages.insert(0, receivedMessage);
+    relayMetrics.recordStored();
     notifyListeners();
+
+    // 5. Multi-hop DTN Store-and-Forward relay:
+    // If broadcast or destined for another node, enqueue for relay to further nodes
+    if (receivedMessage.isBroadcast || receivedMessage.destinationNodeId != localNodeId) {
+      final scheduler = _effectiveScheduler;
+      if (scheduler != null) {
+        scheduler.scheduleMessage(receivedMessage);
+        await scheduler.sweepRelay(_currentPeers);
+      } else {
+        await dtnRouter.routeMessage(receivedMessage, _currentPeers);
+      }
+    }
   }
 
   /// Ingestion handler for application-level ACKs received from peer nodes.
@@ -115,6 +151,8 @@ class MessageManager extends ChangeNotifier {
           MessageStatus.deliveredToPeer,
         );
       }
+      _effectiveScheduler?.recordAck(ack.messageId, ack.ackNodeId);
+      relayMetrics.recordDelivered();
       notifyListeners();
     }
   }
@@ -259,6 +297,7 @@ class MessageManager extends ChangeNotifier {
 
   @override
   void dispose() {
+    _effectiveScheduler?.stopPeriodicRelay();
     _peerSubscription?.cancel();
     _transportMessageSubscription?.cancel();
     _transportAckSubscription?.cancel();

@@ -45,4 +45,31 @@ class AppConstants {
 
   /// Timeout for awaiting an application-level ACK after transmission.
   static const int bleAckTimeoutSeconds = 8;
+
+  // ─── Step 6: Multi-Hop DTN Relay Constants ────────────────────────────────
+
+  /// Maximum number of hops a bundle may traverse before being discarded.
+  /// Prevents routing storms in dense mesh topologies.
+  static const int maxHopCount = 10;
+
+  /// Default maximum hops applied when creating a new outbound message.
+  static const int defaultMaxHops = 10;
+
+  /// Interval (seconds) between opportunistic relay sweeps when peers are present.
+  static const int relaySchedulerIntervalSeconds = 5;
+
+  /// Maximum entries kept in per-message forwarding history to bound memory.
+  static const int maxForwardingHistoryEntries = 20;
+
+  /// Maximum number of messages allowed in the relay outbox queue.
+  static const int relayOutboxCapacity = 100;
+
+  /// Minimum remaining TTL (seconds) a message must have to be considered for relay.
+  static const int minTtlForRelaySeconds = 30;
+
+  /// Minimum RSSI (dBm) for a peer to be selected as a relay target.
+  static const int minRelayRssi = -95;
+
+  /// Maximum retries per message per peer before it is deprioritised.
+  static const int maxRelayRetriesPerPeer = 3;
 }

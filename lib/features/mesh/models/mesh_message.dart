@@ -1,4 +1,6 @@
+import 'dart:convert';
 import '../../identity/models/node_role.dart';
+import '../../routing/models/forwarding_record.dart';
 
 /// Categories of emergency mesh messages supported by ResQMesh.
 enum MessageType {
@@ -51,6 +53,7 @@ class MeshMessage {
   final int retryCount;
   final DateTime? lastForwardedAt;
   final NodeRole createdByRole;
+  final List<ForwardingRecord> forwardingHistory;
 
   MeshMessage({
     String? messageId,
@@ -69,6 +72,7 @@ class MeshMessage {
     this.retryCount = 0,
     this.lastForwardedAt,
     this.createdByRole = NodeRole.civilian,
+    List<ForwardingRecord>? forwardingHistory,
     // Step 1 backwards-compatibility alias parameters:
     String? id,
     String? senderId,
@@ -84,7 +88,8 @@ class MeshMessage {
         ttl = ttl ?? 86400, // 24 hours default TTL
         expiresAt = (expiresAt ?? (createdAt ?? timestamp ?? DateTime.now().toUtc()).add(Duration(seconds: ttl ?? 86400))).toUtc(),
         priority = priority ?? MessagePriority.normal,
-        messageType = messageType ?? ((priority == MessagePriority.critical) ? MessageType.sos : MessageType.info);
+        messageType = messageType ?? ((priority == MessagePriority.critical) ? MessageType.sos : MessageType.info),
+        forwardingHistory = forwardingHistory != null ? List.unmodifiable(forwardingHistory) : const [];
 
   // Backward compatibility getters for Step 1 UI & tests
   String get id => messageId;
@@ -95,6 +100,13 @@ class MeshMessage {
 
   bool get isBroadcast => destinationNodeId == '*' || destinationNodeId.isEmpty;
   bool get isSos => messageType == MessageType.sos || priority == MessagePriority.critical;
+
+  /// Returns true if this message has already visited the given [nodeId],
+  /// preventing routing loops.
+  bool hasVisitedNode(String nodeId) {
+    if (originNodeId == nodeId || senderNodeId == nodeId) return true;
+    return forwardingHistory.any((r) => r.relayNodeId == nodeId);
+  }
 
   /// Evaluates whether the bundle has exceeded its time-to-live.
   bool isExpired({DateTime? referenceTime}) {
@@ -119,6 +131,7 @@ class MeshMessage {
     int? retryCount,
     DateTime? lastForwardedAt,
     NodeRole? createdByRole,
+    List<ForwardingRecord>? forwardingHistory,
     // Legacy parameter aliases
     String? id,
     String? senderId,
@@ -143,6 +156,7 @@ class MeshMessage {
       retryCount: retryCount ?? this.retryCount,
       lastForwardedAt: lastForwardedAt ?? this.lastForwardedAt,
       createdByRole: createdByRole ?? this.createdByRole,
+      forwardingHistory: forwardingHistory ?? this.forwardingHistory,
     );
   }
 
@@ -165,11 +179,24 @@ class MeshMessage {
       'retry_count': retryCount,
       'last_forwarded_at': lastForwardedAt?.millisecondsSinceEpoch,
       'created_by_role': createdByRole.name,
+      'forwarding_history': jsonEncode(forwardingHistory.map((r) => r.toMap()).toList()),
     };
   }
 
   /// Reconstructs a [MeshMessage] from a SQLite row map.
   factory MeshMessage.fromDatabaseMap(Map<String, dynamic> map) {
+    List<ForwardingRecord> history = const [];
+    if (map['forwarding_history'] != null) {
+      try {
+        final decoded = jsonDecode(map['forwarding_history'] as String);
+        if (decoded is List) {
+          history = decoded
+              .map((e) => ForwardingRecord.fromMap(e as Map<String, dynamic>))
+              .toList();
+        }
+      } catch (_) {}
+    }
+
     return MeshMessage(
       messageId: map['message_id'] as String,
       originNodeId: map['origin_node_id'] as String,
@@ -201,6 +228,7 @@ class MeshMessage {
         (r) => r.name == map['created_by_role'],
         orElse: () => NodeRole.civilian,
       ),
+      forwardingHistory: history,
     );
   }
 
@@ -228,6 +256,7 @@ class MeshMessage {
       'retryCount': retryCount,
       'lastForwardedAt': lastForwardedAt?.toIso8601String(),
       'createdByRole': createdByRole.name,
+      'forwardingHistory': forwardingHistory.map((r) => r.toMap()).toList(),
     };
   }
 
@@ -242,6 +271,18 @@ class MeshMessage {
     final rawExpiresAt = map['expiresAt'] != null
         ? DateTime.parse(map['expiresAt'] as String)
         : rawCreatedAt.add(Duration(seconds: rawTtl));
+
+    List<ForwardingRecord> history = const [];
+    if (map['forwardingHistory'] != null) {
+      try {
+        final rawHistory = map['forwardingHistory'];
+        if (rawHistory is List) {
+          history = rawHistory
+              .map((e) => ForwardingRecord.fromMap(e as Map<String, dynamic>))
+              .toList();
+        }
+      } catch (_) {}
+    }
 
     return MeshMessage(
       messageId: rawMessageId,
@@ -274,6 +315,7 @@ class MeshMessage {
         (r) => r.name == map['createdByRole'],
         orElse: () => NodeRole.civilian,
       ),
+      forwardingHistory: history,
     );
   }
 }
