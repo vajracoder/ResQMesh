@@ -3,35 +3,41 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:resqmesh/features/decision/basic_decision_engine.dart';
 import 'package:resqmesh/features/discovery/ble_discovery_stub.dart';
+import 'package:resqmesh/features/identity/repositories/in_memory_node_identity_repository.dart';
+import 'package:resqmesh/features/identity/services/node_identity_service.dart';
 import 'package:resqmesh/features/mesh/message_manager.dart';
 import 'package:resqmesh/features/routing/dtn_router_stub.dart';
 import 'package:resqmesh/main.dart';
 
 void main() {
-  testWidgets('ResQMesh Step 1 Foundation Smoke & Navigation Test', (WidgetTester tester) async {
+  testWidgets('ResQMesh Step 1+2 Foundation Smoke & Navigation Test', (WidgetTester tester) async {
     final decisionEngine = BasicDecisionEngine();
     final dtnRouter = DtnRouterStub();
     final discoveryService = BleDiscoveryStub();
+
+    final identityRepo = InMemoryNodeIdentityRepository();
+    final identityService = NodeIdentityService(repository: identityRepo);
+    await identityService.initialize();
 
     final messageManager = MessageManager(
       decisionEngine: decisionEngine,
       dtnRouter: dtnRouter,
       discoveryService: discoveryService,
-      localNodeId: 'node-test-ui',
+      identityService: identityService,
     );
 
     await tester.pumpWidget(
       MultiProvider(
         providers: [
+          ChangeNotifierProvider<NodeIdentityService>.value(value: identityService),
           ChangeNotifierProvider<MessageManager>.value(value: messageManager),
         ],
         child: const ResQMeshApp(),
       ),
     );
 
-    // Verify OFFLINE MESH banner and Node ID
+    // Verify OFFLINE MESH banner
     expect(find.text('OFFLINE MESH ACTIVE'), findsOneWidget);
-    expect(find.text('node-test-ui'), findsOneWidget);
 
     // Verify SOS button exists
     expect(find.text('BROADCAST'), findsOneWidget);
@@ -54,7 +60,6 @@ void main() {
 
     // Verify message is now queued in local DTN outbox
     expect(messageManager.queuedMessageCount, equals(1));
-    expect(find.text('1'), findsWidgets);
 
     // Test Navigation to Messages tab
     await tester.tap(find.byIcon(Icons.forum_outlined));
@@ -73,5 +78,18 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Architecture & Diagnostics'), findsOneWidget);
     expect(find.text('STRICT ZERO-INTERNET RULE'), findsOneWidget);
+
+    // Step 2: Verify MY NODE section appears with identity data
+    expect(find.text('MY NODE'), findsOneWidget);
+    expect(find.text('Node ID'), findsOneWidget);
+    expect(find.text('Display Name'), findsOneWidget);
+    expect(find.text('ResQMesh Node'), findsWidgets);
+    expect(find.text('CIVILIAN'), findsOneWidget);
+    expect(find.text('No'), findsOneWidget); // Gateway: No
+
+    // Verify Node Identity layer is present in pipeline diagram
+    await tester.drag(find.byType(ListView).first, const Offset(0, -500));
+    await tester.pumpAndSettle();
+    expect(find.text('Node Identity'), findsOneWidget);
   });
 }

@@ -3,6 +3,7 @@ class AppConstants {
   static const String appName = 'ResQMesh';
   static const String appTagline = 'Adaptive Offline Emergency Network';
   static const String appVersion = '1.0.0-foundation';
+  static const String protocolVersion = '1.0';
 
   // Network & Routing defaults
   static const int defaultTtlHops = 5;
@@ -10,6 +11,7 @@ class AppConstants {
   static const String broadcastAddress = '*';
 
   // Storage keys (for Phase 2/3)
+  static const String keyNodeIdentity = 'resqmesh_node_identity';
   static const String keyNodeId = 'resqmesh_node_id';
   static const String keyNodeName = 'resqmesh_node_name';
 }

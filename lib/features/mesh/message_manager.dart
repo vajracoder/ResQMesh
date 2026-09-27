@@ -4,6 +4,7 @@ import 'package:uuid/uuid.dart';
 
 import '../decision/decision_engine_interface.dart';
 import '../discovery/peer_discovery_interface.dart';
+import '../identity/services/node_identity_service.dart';
 import '../routing/dtn_router_interface.dart';
 import 'models/mesh_message.dart';
 import 'models/peer_node.dart';
@@ -14,6 +15,7 @@ class MessageManager extends ChangeNotifier {
   final DecisionEngine decisionEngine;
   final DtnRouter dtnRouter;
   final PeerDiscoveryService discoveryService;
+  final NodeIdentityService? identityService;
   final String _localNodeId;
   final _uuid = const Uuid();
 
@@ -25,6 +27,7 @@ class MessageManager extends ChangeNotifier {
     required this.decisionEngine,
     required this.dtnRouter,
     required this.discoveryService,
+    this.identityService,
     String? localNodeId,
   })  : _localNodeId = localNodeId ?? 'node-local-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}' {
     _init();
@@ -40,7 +43,14 @@ class MessageManager extends ChangeNotifier {
   }
 
   // --- Public Getters ---
-  String get localNodeId => _localNodeId;
+  String get localNodeId {
+    final serviceId = identityService?.currentNodeId;
+    if (serviceId != null && serviceId.isNotEmpty) {
+      return serviceId;
+    }
+    return _localNodeId;
+  }
+
   List<MeshMessage> get messages => List.unmodifiable(_messages);
   List<PeerNode> get peers => List.unmodifiable(_currentPeers);
   int get activePeerCount => _currentPeers.length;
@@ -63,7 +73,7 @@ class MessageManager extends ChangeNotifier {
   }) async {
     final message = MeshMessage(
       id: _uuid.v4(),
-      senderId: _localNodeId,
+      senderId: localNodeId,
       recipientId: recipientId,
       content: content.trim(),
       timestamp: DateTime.now().toUtc(),

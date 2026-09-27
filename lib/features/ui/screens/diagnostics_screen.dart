@@ -1,15 +1,99 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+
 import '../../../core/constants/app_constants.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../identity/models/node_role.dart';
+import '../../identity/services/node_identity_service.dart';
 import '../../mesh/message_manager.dart';
 
 class DiagnosticsScreen extends StatelessWidget {
   const DiagnosticsScreen({super.key});
 
+  void _copyNodeId(BuildContext context, String nodeId) {
+    Clipboard.setData(ClipboardData(text: nodeId));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Node ID copied'),
+        duration: Duration(seconds: 2),
+        backgroundColor: AppTheme.cardBackground,
+      ),
+    );
+  }
+
+  void _showEditDisplayNameDialog(BuildContext context, NodeIdentityService identityService) {
+    final currentName = identityService.identity?.displayName ?? 'ResQMesh Node';
+    final textController = TextEditingController(text: currentName);
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          backgroundColor: AppTheme.cardBackground,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+            side: const BorderSide(color: AppTheme.cardBorder),
+          ),
+          title: const Text(
+            'Edit Display Name',
+            style: TextStyle(color: AppTheme.textPrimary, fontSize: 17, fontWeight: FontWeight.bold),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'This local label is shown to nearby mesh nodes. Node ID remains strictly unchanged.',
+                style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+              ),
+              const SizedBox(height: 14),
+              TextField(
+                controller: textController,
+                autofocus: true,
+                style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14),
+                decoration: InputDecoration(
+                  filled: true,
+                  fillColor: const Color(0xFF101319),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: const BorderSide(color: AppTheme.cardBorder),
+                  ),
+                  labelText: 'Display Name',
+                  labelStyle: const TextStyle(color: AppTheme.textMuted),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('CANCEL', style: TextStyle(color: AppTheme.textMuted)),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                final newName = textController.text.trim();
+                if (newName.isNotEmpty) {
+                  await identityService.updateDisplayName(newName);
+                }
+                if (context.mounted) {
+                  Navigator.of(ctx).pop();
+                }
+              },
+              child: const Text('SAVE'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final manager = context.watch<MessageManager>();
+    final identityService = context.watch<NodeIdentityService>();
+    final identity = identityService.identity;
 
     final architectureLayers = [
       _ArchStep(
@@ -18,6 +102,13 @@ class DiagnosticsScreen extends StatelessWidget {
         status: 'Active (Step 1)',
         isActive: true,
         icon: Icons.dashboard_outlined,
+      ),
+      _ArchStep(
+        title: 'Node Identity',
+        subtitle: 'Cryptographic UUID persistent across app restarts',
+        status: 'Active (Step 2)',
+        isActive: true,
+        icon: Icons.fingerprint_rounded,
       ),
       _ArchStep(
         title: 'Message Manager',
@@ -63,6 +154,10 @@ class DiagnosticsScreen extends StatelessWidget {
       ),
     ];
 
+    final createdFormatted = identity != null
+        ? DateFormat('yyyy-MM-dd HH:mm:ss').format(identity.createdAt.toLocal())
+        : 'Loading...';
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Architecture & Diagnostics'),
@@ -78,10 +173,10 @@ class DiagnosticsScreen extends StatelessWidget {
               borderRadius: BorderRadius.circular(14),
               border: Border.all(color: AppTheme.meshCyan.withValues(alpha: 0.5)),
             ),
-            child: Column(
+            child: const Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Row(
+                Row(
                   children: [
                     Icon(Icons.shield_outlined, color: AppTheme.meshCyan, size: 20),
                     SizedBox(width: 8),
@@ -96,22 +191,218 @@ class DiagnosticsScreen extends StatelessWidget {
                     ),
                   ],
                 ),
-                const SizedBox(height: 8),
-                const Text(
+                SizedBox(height: 8),
+                Text(
                   'The ResQMesh core path operates completely autonomously on-device. No cellular data, Wi-Fi router, or cloud backend is required for mesh discovery and message delivery.',
                   style: TextStyle(fontSize: 12, color: AppTheme.textSecondary, height: 1.4),
                 ),
-                const SizedBox(height: 12),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          // Diagnostic Storage Error if any
+          if (identityService.hasError) ...[
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: const Color(0xFF2E1518),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppTheme.sosRed),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.error_outline, color: AppTheme.sosRed, size: 20),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      identityService.errorMessage ?? 'Identity storage error',
+                      style: const TextStyle(fontSize: 12, color: Colors.white),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
+
+          // --------------------------------
+          // MY NODE SECTION
+          // --------------------------------
+          const Text(
+            'MY NODE',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.8,
+              color: AppTheme.textMuted,
+            ),
+          ),
+          const SizedBox(height: 10),
+
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppTheme.cardBackground,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: AppTheme.cardBorder),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Node ID with Copy Button
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Node ID',
+                            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textMuted),
+                          ),
+                          const SizedBox(height: 4),
+                          SelectableText(
+                            identity?.nodeId ?? manager.localNodeId,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontFamily: 'monospace',
+                              fontWeight: FontWeight.w700,
+                              color: AppTheme.meshCyan,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.copy_rounded, size: 18, color: AppTheme.meshCyan),
+                      tooltip: 'Copy Node ID',
+                      onPressed: () => _copyNodeId(context, identity?.nodeId ?? manager.localNodeId),
+                    ),
+                  ],
+                ),
+                const Divider(height: 24),
+
+                // Display Name with Edit Button
                 Row(
                   children: [
-                    const Text('Local Node ID: ', style: TextStyle(fontSize: 11, color: AppTheme.textMuted)),
-                    Text(
-                      manager.localNodeId,
-                      style: const TextStyle(
-                        fontSize: 11,
-                        fontFamily: 'monospace',
-                        color: AppTheme.meshCyan,
-                        fontWeight: FontWeight.bold,
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Display Name',
+                            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textMuted),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            identity?.displayName ?? 'ResQMesh Node',
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: AppTheme.textPrimary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.edit_outlined, size: 18, color: AppTheme.textSecondary),
+                      tooltip: 'Edit Display Name',
+                      onPressed: () => _showEditDisplayNameDialog(context, identityService),
+                    ),
+                  ],
+                ),
+                const Divider(height: 24),
+
+                // Role & Gateway status row
+                Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Role',
+                            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textMuted),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            identity?.role.displayName ?? NodeRole.civilian.displayName,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              color: AppTheme.textPrimary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Gateway',
+                            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textMuted),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            (identity?.isGateway ?? false) ? 'Yes' : 'No',
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              color: AppTheme.textPrimary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const Divider(height: 24),
+
+                // Protocol Version & Created Timestamp row
+                Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Protocol Version',
+                            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textMuted),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            identity?.protocolVersion ?? AppConstants.protocolVersion,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              color: AppTheme.textPrimary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Created',
+                            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textMuted),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            createdFormatted,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: AppTheme.textSecondary,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
@@ -119,8 +410,9 @@ class DiagnosticsScreen extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 24),
 
+          // Core Path Status Flow
           const Text(
             'CORE PATH PIPELINE STATUS',
             style: TextStyle(
@@ -132,7 +424,6 @@ class DiagnosticsScreen extends StatelessWidget {
           ),
           const SizedBox(height: 12),
 
-          // Flow diagram list
           ...architectureLayers.asMap().entries.map((entry) {
             final idx = entry.key;
             final step = entry.value;
