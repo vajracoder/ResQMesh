@@ -37,37 +37,50 @@ class MessageCard extends StatelessWidget {
     Color statusColor;
     String statusText;
     switch (message.status) {
-      case MessageStatus.draft:
-        statusColor = AppTheme.textMuted;
-        statusText = 'Draft';
+      case MessageStatus.sending:
+        statusColor = AppTheme.alertAmber;
+        statusText = 'SENDING';
+        break;
+      case MessageStatus.sentToPeer:
+        statusColor = AppTheme.meshCyan;
+        statusText = 'SENT TO PEER';
+        break;
+      case MessageStatus.deliveredToPeer:
+      case MessageStatus.delivered:
+        statusColor = AppTheme.activeGreen;
+        statusText = 'DELIVERED TO PEER';
         break;
       case MessageStatus.queued:
         statusColor = AppTheme.alertAmber;
-        statusText = 'Queued';
+        statusText = 'QUEUED';
+        break;
+      case MessageStatus.received:
+        statusColor = AppTheme.activeGreen;
+        statusText = 'RECEIVED';
         break;
       case MessageStatus.stored:
         statusColor = AppTheme.meshCyan;
-        statusText = 'Stored (SQLite)';
+        statusText = 'STORED';
         break;
       case MessageStatus.forwarding:
         statusColor = AppTheme.alertAmber;
-        statusText = 'Forwarding';
+        statusText = 'FORWARDING';
         break;
       case MessageStatus.forwarded:
         statusColor = AppTheme.activeGreen;
-        statusText = 'Forwarded';
+        statusText = 'FORWARDED';
         break;
-      case MessageStatus.delivered:
-        statusColor = AppTheme.activeGreen;
-        statusText = 'Delivered';
+      case MessageStatus.draft:
+        statusColor = AppTheme.textMuted;
+        statusText = 'DRAFT';
         break;
       case MessageStatus.expired:
         statusColor = AppTheme.textMuted;
-        statusText = 'Expired';
+        statusText = 'EXPIRED';
         break;
       case MessageStatus.failed:
         statusColor = AppTheme.sosRed;
-        statusText = 'Failed';
+        statusText = 'FAILED';
         break;
     }
 
@@ -167,6 +180,11 @@ class MessageCard extends StatelessWidget {
                 style: const TextStyle(fontSize: 11, color: AppTheme.textMuted),
               ),
             ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'ID: ${message.messageId.length > 20 ? "${message.messageId.substring(0, 16)}..." : message.messageId} • Sender: ${message.senderNodeId.length > 16 ? "${message.senderNodeId.substring(0, 14)}..." : message.senderNodeId}',
+            style: const TextStyle(fontSize: 10, fontFamily: 'monospace', color: AppTheme.textMuted),
           ),
         ],
       ),

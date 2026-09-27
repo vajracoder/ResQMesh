@@ -21,9 +21,13 @@ enum MessageStatus {
   draft,
   queued,
   stored,
+  sending,
+  sentToPeer,
+  deliveredToPeer,
   forwarding,
   forwarded,
   delivered,
+  received,
   expired,
   failed,
 }

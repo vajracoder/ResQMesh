@@ -1,3 +1,5 @@
+import 'dart:io' show Platform;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
@@ -5,11 +7,12 @@ import 'package:provider/provider.dart';
 
 import '../../../core/constants/app_constants.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../discovery/ble_discovery_service.dart';
 import '../../identity/services/node_identity_service.dart';
 import '../../mesh/message_manager.dart';
 
 /// Screen detailing the ResQMesh system status, persistent Node Identity,
-/// local SQLite DTN bundle storage statistics, and offline core path pipeline.
+/// local SQLite DTN storage statistics, BLE peer discovery, and offline core path pipeline.
 class DiagnosticsScreen extends StatelessWidget {
   const DiagnosticsScreen({super.key});
 
@@ -115,7 +118,13 @@ class DiagnosticsScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final manager = context.watch<MessageManager>();
     final identityService = context.watch<NodeIdentityService>();
+    final bleService = context.watch<BleDiscoveryService?>();
     final identity = identityService.identity;
+
+    final isAndroid = !kIsWeb && Platform.isAndroid;
+    final isScanning = bleService?.isDiscovering ?? manager.discoveryService.isDiscovering;
+    final bluetoothState = bleService?.hardwareState ?? BleHardwareState.unknown;
+    final isBluetoothOn = bluetoothState == BleHardwareState.poweredOn;
 
     final architectureLayers = [
       const _ArchStep(
@@ -154,18 +163,18 @@ class DiagnosticsScreen extends StatelessWidget {
         icon: Icons.storage_rounded,
       ),
       const _ArchStep(
+        title: 'Peer Discovery (BLE)',
+        subtitle: 'Real-time neighbor detection & presence beacons',
+        status: 'Active (Step 4)',
+        isActive: true,
+        icon: Icons.sensors_outlined,
+      ),
+      const _ArchStep(
         title: 'DTN Router',
         subtitle: 'Opportunistic Store-and-Forward bundle routing',
         status: 'In-Memory Queue (Step 3/7)',
         isActive: true,
         icon: Icons.swap_calls_rounded,
-      ),
-      const _ArchStep(
-        title: 'Peer Discovery',
-        subtitle: 'BLE neighbor detection & presence beacons',
-        status: 'Scheduled (Step 4)',
-        isActive: false,
-        icon: Icons.sensors_outlined,
       ),
       const _ArchStep(
         title: 'BLE Local Communication',
@@ -186,6 +195,10 @@ class DiagnosticsScreen extends StatelessWidget {
     final createdFormatted = identity != null
         ? DateFormat('yyyy-MM-dd HH:mm:ss').format(identity.createdAt.toLocal())
         : 'Loading...';
+
+    final lastScanFormatted = bleService?.lastScanTimestamp != null
+        ? DateFormat('HH:mm:ss').format(bleService!.lastScanTimestamp!.toLocal())
+        : 'No scan yet';
 
     return Scaffold(
       appBar: AppBar(
@@ -588,6 +601,142 @@ class DiagnosticsScreen extends StatelessWidget {
                       ),
                     ],
                   ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 24),
+
+          // --------------------------------
+          // BLE PEER DISCOVERY SECTION (Step 4)
+          // --------------------------------
+          const Text(
+            'BLE PEER DISCOVERY',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.8,
+              color: AppTheme.textMuted,
+            ),
+          ),
+          const SizedBox(height: 10),
+
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppTheme.cardBackground,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: AppTheme.cardBorder),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('BLE Hardware', style: TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
+                    Text(
+                      isAndroid ? 'Available' : 'Supported on Android',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: isAndroid ? AppTheme.activeGreen : AppTheme.alertAmber,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('Bluetooth Power', style: TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
+                    Text(
+                      isAndroid ? (isBluetoothOn ? 'ON' : 'OFF') : 'N/A',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: isBluetoothOn ? AppTheme.activeGreen : AppTheme.textMuted,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('Permissions', style: TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
+                    Text(
+                      bleService?.scanStatus == BleScanStatus.permissionDenied ? 'Denied' : 'Granted/Checked',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: bleService?.scanStatus == BleScanStatus.permissionDenied
+                            ? AppTheme.sosRed
+                            : AppTheme.activeGreen,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('Scanning', style: TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
+                    Text(
+                      isScanning ? 'Active' : 'Inactive',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: isScanning ? AppTheme.meshCyan : AppTheme.textMuted,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('ResQMesh Peers', style: TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
+                    Text(
+                      '${manager.activePeerCount}',
+                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppTheme.meshCyan),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('Last Scan Result', style: TextStyle(fontSize: 12, color: AppTheme.textMuted)),
+                    Text(
+                      lastScanFormatted,
+                      style: const TextStyle(fontSize: 12, color: AppTheme.textMuted),
+                    ),
+                  ],
+                ),
+                const Divider(height: 20),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    icon: Icon(
+                      isScanning ? Icons.stop_circle_outlined : Icons.sensors_outlined,
+                      size: 16,
+                      color: isScanning ? AppTheme.alertAmber : AppTheme.meshCyan,
+                    ),
+                    label: Text(
+                      isScanning ? 'Stop BLE Scanning' : 'Scan for Peers',
+                      style: TextStyle(color: isScanning ? AppTheme.alertAmber : AppTheme.meshCyan),
+                    ),
+                    onPressed: () async {
+                      if (bleService != null) {
+                        if (isScanning) {
+                          await bleService.stopDiscovery();
+                        } else {
+                          await bleService.startDiscovery();
+                        }
+                      }
+                    },
+                  ),
                 ),
               ],
             ),

@@ -8,13 +8,15 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'core/constants/app_constants.dart';
 import 'core/theme/app_theme.dart';
 import 'features/decision/basic_decision_engine.dart';
-import 'features/discovery/ble_discovery_stub.dart';
+import 'features/discovery/ble_discovery_service.dart';
 import 'features/identity/repositories/shared_prefs_node_identity_repository.dart';
 import 'features/identity/services/node_identity_service.dart';
 import 'features/mesh/message_manager.dart';
-import 'features/routing/dtn_router_stub.dart';
+import 'features/routing/ble_dtn_router.dart';
 import 'features/storage/repositories/dtn_message_repository.dart';
 import 'features/storage/repositories/sqlite_dtn_message_repository.dart';
+import 'features/transport/ble_transport.dart';
+import 'features/transport/flutter_ble_transport.dart';
 import 'features/ui/screens/main_shell.dart';
 
 Future<void> main() async {
@@ -55,15 +57,34 @@ Future<void> main() async {
     debugPrint('ResQMesh: Initial SQLite DTN database load warning: $e');
   }
 
-  // Initialize Step 1 Core Path components
+  // Initialize Step 4: Real BLE Peer Discovery
+  final discoveryService = BleDiscoveryService(identityService: identityService);
+  try {
+    await discoveryService.initialize();
+  } catch (e) {
+    debugPrint('ResQMesh: Initial BLE discovery notice: $e');
+  }
+
+  // Initialize Step 5: Real BLE Message Transport
+  final bleTransport = FlutterBleTransport(identityService: identityService);
+  try {
+    await bleTransport.initialize();
+  } catch (e) {
+    debugPrint('ResQMesh: Initial BLE transport notice: $e');
+  }
+
+  // Initialize Core Path components (Step 1 + Step 5 BleDtnRouter)
   final decisionEngine = BasicDecisionEngine();
-  final dtnRouter = DtnRouterStub();
-  final discoveryService = BleDiscoveryStub();
+  final dtnRouter = BleDtnRouter(
+    transport: bleTransport,
+    messageRepository: messageRepository,
+  );
 
   final messageManager = MessageManager(
     decisionEngine: decisionEngine,
     dtnRouter: dtnRouter,
     discoveryService: discoveryService,
+    transport: bleTransport,
     identityService: identityService,
     messageRepository: messageRepository,
   );
@@ -78,6 +99,8 @@ Future<void> main() async {
     MultiProvider(
       providers: [
         ChangeNotifierProvider<NodeIdentityService>.value(value: identityService),
+        ChangeNotifierProvider<BleDiscoveryService>.value(value: discoveryService),
+        ChangeNotifierProvider<BleTransport>.value(value: bleTransport),
         ChangeNotifierProvider<MessageManager>.value(value: messageManager),
         Provider<DtnMessageRepository>.value(value: messageRepository),
       ],

@@ -8,15 +8,19 @@ import '../identity/models/node_role.dart';
 import '../identity/services/node_identity_service.dart';
 import '../routing/dtn_router_interface.dart';
 import '../storage/repositories/dtn_message_repository.dart';
+import '../transport/ble_transport.dart';
+import '../transport/codecs/ble_message_wire_format.dart';
+import '../transport/models/ble_packet.dart';
 import 'models/mesh_message.dart';
 import 'models/peer_node.dart';
 
 /// Central Message Manager coordinating the offline ResQMesh core path:
-/// Flutter UI -> Message Manager -> Decision Engine -> DTN Repository -> SQLite -> DTN Router -> Peer Discovery -> BLE
+/// Flutter UI -> Message Manager -> Decision Engine -> DTN Repository -> SQLite -> DTN Router -> Peer Discovery -> BLE Transport
 class MessageManager extends ChangeNotifier {
   final DecisionEngine decisionEngine;
   final DtnRouter dtnRouter;
   final PeerDiscoveryService discoveryService;
+  final BleTransport? transport;
   final NodeIdentityService? identityService;
   final DtnMessageRepository? messageRepository;
   final String _localNodeId;
@@ -24,6 +28,9 @@ class MessageManager extends ChangeNotifier {
 
   final List<MeshMessage> _messages = [];
   StreamSubscription<List<PeerNode>>? _peerSubscription;
+  StreamSubscription<MeshMessage>? _transportMessageSubscription;
+  StreamSubscription<BleAckPacket>? _transportAckSubscription;
+  StreamSubscription<PeerNode>? _peerConnectionSubscription;
   List<PeerNode> _currentPeers = [];
   bool _isStorageInitialized = false;
 
@@ -31,6 +38,7 @@ class MessageManager extends ChangeNotifier {
     required this.decisionEngine,
     required this.dtnRouter,
     required this.discoveryService,
+    this.transport,
     this.identityService,
     this.messageRepository,
     String? localNodeId,
@@ -45,6 +53,70 @@ class MessageManager extends ChangeNotifier {
       dtnRouter.onPeersUpdated(peers);
       notifyListeners();
     });
+
+    if (transport != null) {
+      _transportMessageSubscription = transport!.onMessageReceived.listen(_handleIncomingMessage);
+      _transportAckSubscription = transport!.onAckReceived.listen(_handleIncomingAck);
+      _peerConnectionSubscription = transport!.onPeerConnectionChanged.listen((updatedPeer) {
+        final index = _currentPeers.indexWhere((p) => p.nodeId == updatedPeer.nodeId);
+        if (index != -1) {
+          _currentPeers[index] = updatedPeer;
+          notifyListeners();
+        }
+      });
+    }
+  }
+
+  /// Ingestion handler for messages received over BLE from neighboring nodes.
+  /// Enforces validation, duplicate protection, SQLite persistence, and UI emission.
+  Future<void> _handleIncomingMessage(MeshMessage message) async {
+    // 1. Validate incoming message format and constraints
+    try {
+      BleMessageWireFormat.validate(message);
+    } catch (e) {
+      debugPrint('ResQMesh: Dropped invalid incoming message: $e');
+      return;
+    }
+
+    // 2. Duplicate protection: verify messageId does not already exist
+    final alreadyInMemory = _messages.any((m) => m.messageId == message.messageId);
+    if (alreadyInMemory) {
+      return;
+    }
+
+    if (messageRepository != null) {
+      final existingInDb = await messageRepository!.getMessageById(message.messageId);
+      if (existingInDb != null) {
+        return;
+      }
+    }
+
+    // 3. Mark as received and persist to SQLite DTN storage
+    final receivedMessage = message.copyWith(status: MessageStatus.received);
+    if (messageRepository != null) {
+      await messageRepository!.createMessage(receivedMessage);
+    }
+
+    // 4. Admit to local memory and notify UI
+    _messages.insert(0, receivedMessage);
+    notifyListeners();
+  }
+
+  /// Ingestion handler for application-level ACKs received from peer nodes.
+  Future<void> _handleIncomingAck(BleAckPacket ack) async {
+    final index = _messages.indexWhere((m) => m.messageId == ack.messageId);
+    if (index != -1) {
+      final current = _messages[index];
+      final updated = current.copyWith(status: MessageStatus.deliveredToPeer);
+      _messages[index] = updated;
+      if (messageRepository != null) {
+        await messageRepository!.updateMessageStatus(
+          ack.messageId,
+          MessageStatus.deliveredToPeer,
+        );
+      }
+      notifyListeners();
+    }
   }
 
   /// Initializes storage and loads persisted DTN messages from SQLite into active memory.
@@ -156,13 +228,13 @@ class MessageManager extends ChangeNotifier {
 
     // 5. Update status if forwarded
     if (dispatched) {
-      final updated = message.copyWith(status: MessageStatus.forwarded);
+      final updated = message.copyWith(status: MessageStatus.deliveredToPeer);
       final updatedIndex = _messages.indexWhere((m) => m.messageId == message.messageId);
       if (updatedIndex != -1) {
         _messages[updatedIndex] = updated;
       }
       if (messageRepository != null) {
-        await messageRepository!.updateMessageStatus(message.messageId, MessageStatus.forwarded);
+        await messageRepository!.updateMessageStatus(message.messageId, MessageStatus.deliveredToPeer);
       }
       notifyListeners();
       return updated;
@@ -188,6 +260,9 @@ class MessageManager extends ChangeNotifier {
   @override
   void dispose() {
     _peerSubscription?.cancel();
+    _transportMessageSubscription?.cancel();
+    _transportAckSubscription?.cancel();
+    _peerConnectionSubscription?.cancel();
     super.dispose();
   }
 }

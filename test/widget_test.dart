@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:resqmesh/features/decision/basic_decision_engine.dart';
-import 'package:resqmesh/features/discovery/ble_discovery_stub.dart';
+import 'package:resqmesh/features/discovery/ble_discovery_service.dart';
 import 'package:resqmesh/features/identity/repositories/in_memory_node_identity_repository.dart';
 import 'package:resqmesh/features/identity/services/node_identity_service.dart';
 import 'package:resqmesh/features/mesh/message_manager.dart';
@@ -12,10 +12,9 @@ import 'package:resqmesh/features/storage/repositories/in_memory_dtn_message_rep
 import 'package:resqmesh/main.dart';
 
 void main() {
-  testWidgets('ResQMesh Step 1+2+3 Foundation Smoke & Navigation Test', (WidgetTester tester) async {
+  testWidgets('ResQMesh Step 1+2+3+4 Foundation Smoke & Navigation Test', (WidgetTester tester) async {
     final decisionEngine = BasicDecisionEngine();
     final dtnRouter = DtnRouterStub();
-    final discoveryService = BleDiscoveryStub();
 
     final identityRepo = InMemoryNodeIdentityRepository();
     final identityService = NodeIdentityService(repository: identityRepo);
@@ -23,6 +22,9 @@ void main() {
 
     final messageRepo = InMemoryDtnMessageRepository();
     await messageRepo.init();
+
+    final discoveryService = BleDiscoveryService(identityService: identityService);
+    await discoveryService.initialize();
 
     final messageManager = MessageManager(
       decisionEngine: decisionEngine,
@@ -36,6 +38,7 @@ void main() {
       MultiProvider(
         providers: [
           ChangeNotifierProvider<NodeIdentityService>.value(value: identityService),
+          ChangeNotifierProvider<BleDiscoveryService>.value(value: discoveryService),
           ChangeNotifierProvider<MessageManager>.value(value: messageManager),
           Provider<DtnMessageRepository>.value(value: messageRepo),
         ],
@@ -79,7 +82,8 @@ void main() {
     await tester.tap(find.byIcon(Icons.hub_outlined));
     await tester.pumpAndSettle();
     expect(find.text('Mesh Nodes & Peers'), findsOneWidget);
-    expect(find.text('No Nearby Mesh Nodes'), findsOneWidget);
+    expect(find.text('No ResQMesh peers found'), findsOneWidget);
+    expect(find.text('BLUETOOTH LOW ENERGY DISCOVERY'), findsOneWidget);
 
     // Test Navigation to Diagnostics tab
     await tester.tap(find.byIcon(Icons.schema_outlined));
@@ -104,10 +108,16 @@ void main() {
     expect(find.text('READY'), findsOneWidget);
     expect(find.text('Stored Messages'), findsOneWidget);
 
-    // Scroll further to reveal the pipeline diagram
-    await tester.drag(find.byType(ListView).first, const Offset(0, -500));
+    // Step 4: Scroll further to reveal BLE PEER DISCOVERY section
+    await tester.drag(find.byType(ListView).first, const Offset(0, -350));
     await tester.pumpAndSettle();
+    expect(find.text('BLE PEER DISCOVERY'), findsOneWidget);
+    expect(find.text('BLE Hardware'), findsOneWidget);
+
+    // Scroll further to reveal the pipeline diagram
+    final pipelineFinder = find.text('Peer Discovery (BLE)');
+    await tester.scrollUntilVisible(pipelineFinder, 300, scrollable: find.byType(Scrollable).first);
     expect(find.text('Node Identity'), findsOneWidget);
-    expect(find.text('Local DTN Storage (SQLite)'), findsOneWidget);
+    expect(pipelineFinder, findsOneWidget);
   });
 }
