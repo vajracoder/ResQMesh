@@ -5,47 +5,40 @@ import 'package:provider/provider.dart';
 
 import '../../../core/constants/app_constants.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../identity/models/node_role.dart';
 import '../../identity/services/node_identity_service.dart';
 import '../../mesh/message_manager.dart';
 
+/// Screen detailing the ResQMesh system status, persistent Node Identity,
+/// local SQLite DTN bundle storage statistics, and offline core path pipeline.
 class DiagnosticsScreen extends StatelessWidget {
   const DiagnosticsScreen({super.key});
 
   void _copyNodeId(BuildContext context, String nodeId) {
     Clipboard.setData(ClipboardData(text: nodeId));
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Node ID copied'),
-        duration: Duration(seconds: 2),
+      SnackBar(
+        content: Text('Node ID copied: $nodeId'),
         backgroundColor: AppTheme.cardBackground,
+        duration: const Duration(seconds: 2),
       ),
     );
   }
 
   void _showEditDisplayNameDialog(BuildContext context, NodeIdentityService identityService) {
-    final currentName = identityService.identity?.displayName ?? 'ResQMesh Node';
-    final textController = TextEditingController(text: currentName);
+    final textController = TextEditingController(text: identityService.identity?.displayName ?? '');
 
     showDialog(
       context: context,
       builder: (ctx) {
         return AlertDialog(
           backgroundColor: AppTheme.cardBackground,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
-            side: const BorderSide(color: AppTheme.cardBorder),
-          ),
-          title: const Text(
-            'Edit Display Name',
-            style: TextStyle(color: AppTheme.textPrimary, fontSize: 17, fontWeight: FontWeight.bold),
-          ),
+          title: const Text('Edit Node Display Name', style: TextStyle(color: AppTheme.textPrimary)),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
-                'This local label is shown to nearby mesh nodes. Node ID remains strictly unchanged.',
+                'This name is broadcast to nearby nodes during discovery beacons. It does not alter your persistent Node ID.',
                 style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
               ),
               const SizedBox(height: 14),
@@ -89,6 +82,35 @@ class DiagnosticsScreen extends StatelessWidget {
     );
   }
 
+  Widget _buildMetricTile({
+    required String label,
+    required String value,
+    required Color color,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFF10141C),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppTheme.cardBorder),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textMuted),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: color),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final manager = context.watch<MessageManager>();
@@ -96,56 +118,63 @@ class DiagnosticsScreen extends StatelessWidget {
     final identity = identityService.identity;
 
     final architectureLayers = [
-      _ArchStep(
+      const _ArchStep(
         title: 'Flutter UI',
         subtitle: 'Emergency dashboard, message composer & node monitor',
         status: 'Active (Step 1)',
         isActive: true,
         icon: Icons.dashboard_outlined,
       ),
-      _ArchStep(
+      const _ArchStep(
         title: 'Node Identity',
         subtitle: 'Cryptographic UUID persistent across app restarts',
         status: 'Active (Step 2)',
         isActive: true,
         icon: Icons.fingerprint_rounded,
       ),
-      _ArchStep(
+      const _ArchStep(
         title: 'Message Manager',
         subtitle: 'Decoupled coordination, outbox management & state updates',
         status: 'Active (Step 1)',
         isActive: true,
         icon: Icons.alt_route_rounded,
       ),
-      _ArchStep(
+      const _ArchStep(
         title: 'Decision Engine',
         subtitle: 'Priority admission, TTL enforcement & battery optimization',
         status: 'Contract Ready (Step 8)',
         isActive: true,
         icon: Icons.psychology_outlined,
       ),
-      _ArchStep(
+      const _ArchStep(
+        title: 'Local DTN Storage (SQLite)',
+        subtitle: 'Persistent offline message bundles & store-and-forward queue',
+        status: 'Active (Step 3)',
+        isActive: true,
+        icon: Icons.storage_rounded,
+      ),
+      const _ArchStep(
         title: 'DTN Router',
         subtitle: 'Opportunistic Store-and-Forward bundle routing',
         status: 'In-Memory Queue (Step 3/7)',
         isActive: true,
         icon: Icons.swap_calls_rounded,
       ),
-      _ArchStep(
+      const _ArchStep(
         title: 'Peer Discovery',
         subtitle: 'BLE neighbor detection & presence beacons',
         status: 'Scheduled (Step 4)',
         isActive: false,
         icon: Icons.sensors_outlined,
       ),
-      _ArchStep(
+      const _ArchStep(
         title: 'BLE Local Communication',
         subtitle: 'GATT / L2CAP physical transmission without Internet',
         status: 'Scheduled (Step 6)',
         isActive: false,
         icon: Icons.bluetooth_rounded,
       ),
-      _ArchStep(
+      const _ArchStep(
         title: 'Nearby ResQMesh Nodes',
         subtitle: 'Multi-hop relay to reach survivors and medical hubs',
         status: 'Mesh Target',
@@ -328,12 +357,19 @@ class DiagnosticsScreen extends StatelessWidget {
                             style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textMuted),
                           ),
                           const SizedBox(height: 4),
-                          Text(
-                            identity?.role.displayName ?? NodeRole.civilian.displayName,
-                            style: const TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w700,
-                              color: AppTheme.textPrimary,
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: AppTheme.meshCyan.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              (identity?.role.name ?? 'civilian').toUpperCase(),
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w800,
+                                color: AppTheme.meshCyan,
+                              ),
                             ),
                           ),
                         ],
@@ -344,15 +380,15 @@ class DiagnosticsScreen extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           const Text(
-                            'Gateway',
+                            'Gateway Node',
                             style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textMuted),
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            (identity?.isGateway ?? false) ? 'Yes' : 'No',
+                            (identity?.isGateway ?? false) ? 'Yes (Relay)' : 'No',
                             style: const TextStyle(
                               fontSize: 13,
-                              fontWeight: FontWeight.w700,
+                              fontWeight: FontWeight.w600,
                               color: AppTheme.textPrimary,
                             ),
                           ),
@@ -363,7 +399,7 @@ class DiagnosticsScreen extends StatelessWidget {
                 ),
                 const Divider(height: 24),
 
-                // Protocol Version & Created Timestamp row
+                // Protocol & Created At row
                 Row(
                   children: [
                     Expanded(
@@ -412,6 +448,152 @@ class DiagnosticsScreen extends StatelessWidget {
           ),
           const SizedBox(height: 24),
 
+          // --------------------------------
+          // LOCAL DTN STORAGE SECTION (Step 3)
+          // --------------------------------
+          const Text(
+            'LOCAL DTN STORAGE',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.8,
+              color: AppTheme.textMuted,
+            ),
+          ),
+          const SizedBox(height: 10),
+
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppTheme.cardBackground,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: AppTheme.cardBorder),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Database Status Row
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Database Status',
+                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textSecondary),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: manager.isStorageReady
+                            ? AppTheme.activeGreen.withValues(alpha: 0.15)
+                            : AppTheme.alertAmber.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(
+                          color: manager.isStorageReady ? AppTheme.activeGreen : AppTheme.alertAmber,
+                        ),
+                      ),
+                      child: Text(
+                        manager.isStorageReady ? 'READY' : 'INITIALIZING',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                          color: manager.isStorageReady ? AppTheme.activeGreen : AppTheme.alertAmber,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const Divider(height: 20),
+
+                // Metrics 2x2 Grid
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildMetricTile(
+                        label: 'Stored Messages',
+                        value: manager.totalStoredCount.toString(),
+                        color: AppTheme.meshCyan,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _buildMetricTile(
+                        label: 'Active Messages',
+                        value: manager.activeMessageCount.toString(),
+                        color: AppTheme.activeGreen,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildMetricTile(
+                        label: 'Expired Messages',
+                        value: manager.expiredMessageCount.toString(),
+                        color: AppTheme.textMuted,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _buildMetricTile(
+                        label: 'Critical Messages',
+                        value: manager.criticalMessageCount.toString(),
+                        color: AppTheme.sosRed,
+                      ),
+                    ),
+                  ],
+                ),
+                const Divider(height: 20),
+
+                // Development Action: Create Test Message & Purge Expired
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        icon: const Icon(Icons.add_alert_rounded, size: 16, color: AppTheme.sosRed),
+                        label: const Text('Test SOS', style: TextStyle(fontSize: 12, color: AppTheme.sosRed)),
+                        onPressed: () async {
+                          await manager.createTestMessage();
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Created test SOS message in local SQLite storage.'),
+                                backgroundColor: AppTheme.cardBackground,
+                              ),
+                            );
+                          }
+                        },
+                      ),
+                    ),
+                    if (manager.expiredMessageCount > 0) ...[
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          icon: const Icon(Icons.delete_sweep_rounded, size: 16, color: AppTheme.textMuted),
+                          label: const Text('Purge Expired', style: TextStyle(fontSize: 12, color: AppTheme.textMuted)),
+                          onPressed: () async {
+                            final deleted = await manager.purgeExpiredMessages();
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Purged $deleted expired messages from SQLite.'),
+                                  backgroundColor: AppTheme.cardBackground,
+                                ),
+                              );
+                            }
+                          },
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 24),
+
           // Core Path Status Flow
           const Text(
             'CORE PATH PIPELINE STATUS',
@@ -438,6 +620,7 @@ class DiagnosticsScreen extends StatelessWidget {
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
                       color: step.isActive ? AppTheme.meshCyan.withValues(alpha: 0.4) : AppTheme.cardBorder,
+                      width: step.isActive ? 1.4 : 1.0,
                     ),
                   ),
                   child: Row(
@@ -445,7 +628,9 @@ class DiagnosticsScreen extends StatelessWidget {
                       Container(
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
-                          color: step.isActive ? AppTheme.meshCyan.withValues(alpha: 0.15) : const Color(0xFF1E232B),
+                          color: step.isActive
+                              ? AppTheme.meshCyan.withValues(alpha: 0.15)
+                              : const Color(0xFF161A22),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Icon(
@@ -462,21 +647,21 @@ class DiagnosticsScreen extends StatelessWidget {
                             Text(
                               step.title,
                               style: const TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
                                 color: AppTheme.textPrimary,
                               ),
                             ),
-                            const SizedBox(height: 3),
+                            const SizedBox(height: 2),
                             Text(
                               step.subtitle,
-                              style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary),
+                              style: const TextStyle(fontSize: 11, color: AppTheme.textMuted),
                             ),
                           ],
                         ),
                       ),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                         decoration: BoxDecoration(
                           color: step.isActive ? AppTheme.activeGreenMuted : const Color(0xFF1E232B),
                           borderRadius: BorderRadius.circular(6),

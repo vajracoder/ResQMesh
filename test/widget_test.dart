@@ -7,10 +7,12 @@ import 'package:resqmesh/features/identity/repositories/in_memory_node_identity_
 import 'package:resqmesh/features/identity/services/node_identity_service.dart';
 import 'package:resqmesh/features/mesh/message_manager.dart';
 import 'package:resqmesh/features/routing/dtn_router_stub.dart';
+import 'package:resqmesh/features/storage/repositories/dtn_message_repository.dart';
+import 'package:resqmesh/features/storage/repositories/in_memory_dtn_message_repository.dart';
 import 'package:resqmesh/main.dart';
 
 void main() {
-  testWidgets('ResQMesh Step 1+2 Foundation Smoke & Navigation Test', (WidgetTester tester) async {
+  testWidgets('ResQMesh Step 1+2+3 Foundation Smoke & Navigation Test', (WidgetTester tester) async {
     final decisionEngine = BasicDecisionEngine();
     final dtnRouter = DtnRouterStub();
     final discoveryService = BleDiscoveryStub();
@@ -19,11 +21,15 @@ void main() {
     final identityService = NodeIdentityService(repository: identityRepo);
     await identityService.initialize();
 
+    final messageRepo = InMemoryDtnMessageRepository();
+    await messageRepo.init();
+
     final messageManager = MessageManager(
       decisionEngine: decisionEngine,
       dtnRouter: dtnRouter,
       discoveryService: discoveryService,
       identityService: identityService,
+      messageRepository: messageRepo,
     );
 
     await tester.pumpWidget(
@@ -31,6 +37,7 @@ void main() {
         providers: [
           ChangeNotifierProvider<NodeIdentityService>.value(value: identityService),
           ChangeNotifierProvider<MessageManager>.value(value: messageManager),
+          Provider<DtnMessageRepository>.value(value: messageRepo),
         ],
         child: const ResQMeshApp(),
       ),
@@ -58,8 +65,9 @@ void main() {
     await tester.tap(find.text('DISPATCH SOS NOW'));
     await tester.pumpAndSettle();
 
-    // Verify message is now queued in local DTN outbox
+    // Verify message is now queued/stored in local DTN outbox
     expect(messageManager.queuedMessageCount, equals(1));
+    expect(messageManager.totalStoredCount, equals(1));
 
     // Test Navigation to Messages tab
     await tester.tap(find.byIcon(Icons.forum_outlined));
@@ -87,9 +95,19 @@ void main() {
     expect(find.text('CIVILIAN'), findsOneWidget);
     expect(find.text('No'), findsOneWidget); // Gateway: No
 
-    // Verify Node Identity layer is present in pipeline diagram
+    // Step 3: Scroll down to reveal LOCAL DTN STORAGE section
+    await tester.drag(find.byType(ListView).first, const Offset(0, -350));
+    await tester.pumpAndSettle();
+
+    expect(find.text('LOCAL DTN STORAGE'), findsOneWidget);
+    expect(find.text('Database Status'), findsOneWidget);
+    expect(find.text('READY'), findsOneWidget);
+    expect(find.text('Stored Messages'), findsOneWidget);
+
+    // Scroll further to reveal the pipeline diagram
     await tester.drag(find.byType(ListView).first, const Offset(0, -500));
     await tester.pumpAndSettle();
     expect(find.text('Node Identity'), findsOneWidget);
+    expect(find.text('Local DTN Storage (SQLite)'), findsOneWidget);
   });
 }

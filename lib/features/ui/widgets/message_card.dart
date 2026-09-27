@@ -43,7 +43,15 @@ class MessageCard extends StatelessWidget {
         break;
       case MessageStatus.queued:
         statusColor = AppTheme.alertAmber;
-        statusText = 'Queued (DTN Store)';
+        statusText = 'Queued';
+        break;
+      case MessageStatus.stored:
+        statusColor = AppTheme.meshCyan;
+        statusText = 'Stored (SQLite)';
+        break;
+      case MessageStatus.forwarding:
+        statusColor = AppTheme.alertAmber;
+        statusText = 'Forwarding';
         break;
       case MessageStatus.forwarded:
         statusColor = AppTheme.activeGreen;
@@ -57,7 +65,15 @@ class MessageCard extends StatelessWidget {
         statusColor = AppTheme.textMuted;
         statusText = 'Expired';
         break;
+      case MessageStatus.failed:
+        statusColor = AppTheme.sosRed;
+        statusText = 'Failed';
+        break;
     }
+
+    final originShort = message.originNodeId.length > 12
+        ? '${message.originNodeId.substring(0, 10)}...'
+        : message.originNodeId;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -138,6 +154,13 @@ class MessageCard extends StatelessWidget {
                 statusText,
                 style: TextStyle(fontSize: 11, color: statusColor, fontWeight: FontWeight.w600),
               ),
+              if (originShort.isNotEmpty) ...[
+                const SizedBox(width: 10),
+                Text(
+                  '• Origin: $originShort',
+                  style: const TextStyle(fontSize: 10, color: AppTheme.textMuted),
+                ),
+              ],
               const Spacer(),
               Text(
                 'Hops: ${message.hopCount}/${message.maxHops}',

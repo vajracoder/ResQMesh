@@ -13,10 +13,11 @@ class MessagesScreen extends StatefulWidget {
 }
 
 class _MessagesScreenState extends State<MessagesScreen> {
-  int _selectedFilterIndex = 0; // 0: All, 1: SOS Only, 2: Queued
+  int _selectedFilterIndex = 0; // 0: All, 1: SOS, 2: Hazard, 3: Info, 4: Status, 5: Stored
 
   void _showComposeSheet(BuildContext context) {
     final textController = TextEditingController();
+    MessageType selectedType = MessageType.info;
     MessagePriority selectedPriority = MessagePriority.normal;
 
     showModalBottomSheet(
@@ -45,7 +46,7 @@ class _MessagesScreenState extends State<MessagesScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       const Text(
-                        'Compose Mesh Message',
+                        'Compose DTN Bundle',
                         style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.w700,
@@ -60,13 +61,92 @@ class _MessagesScreenState extends State<MessagesScreen> {
                   ),
                   const SizedBox(height: 12),
                   const Text(
-                    'PRIORITY LEVEL',
+                    'MESSAGE TYPE',
                     style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.textMuted),
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 6),
                   Wrap(
                     spacing: 8,
                     children: [
+                      ChoiceChip(
+                        label: const Text('SOS'),
+                        selected: selectedType == MessageType.sos,
+                        selectedColor: AppTheme.sosRed.withValues(alpha: 0.3),
+                        onSelected: (val) {
+                          if (val) {
+                            setSheetState(() {
+                              selectedType = MessageType.sos;
+                              selectedPriority = MessagePriority.critical;
+                            });
+                          }
+                        },
+                      ),
+                      ChoiceChip(
+                        label: const Text('Hazard'),
+                        selected: selectedType == MessageType.hazard,
+                        selectedColor: AppTheme.alertAmber.withValues(alpha: 0.3),
+                        onSelected: (val) {
+                          if (val) {
+                            setSheetState(() {
+                              selectedType = MessageType.hazard;
+                              selectedPriority = MessagePriority.high;
+                            });
+                          }
+                        },
+                      ),
+                      ChoiceChip(
+                        label: const Text('Info'),
+                        selected: selectedType == MessageType.info,
+                        selectedColor: AppTheme.meshCyan.withValues(alpha: 0.3),
+                        onSelected: (val) {
+                          if (val) {
+                            setSheetState(() {
+                              selectedType = MessageType.info;
+                              selectedPriority = MessagePriority.normal;
+                            });
+                          }
+                        },
+                      ),
+                      ChoiceChip(
+                        label: const Text('Status'),
+                        selected: selectedType == MessageType.status,
+                        selectedColor: AppTheme.textMuted.withValues(alpha: 0.3),
+                        onSelected: (val) {
+                          if (val) {
+                            setSheetState(() {
+                              selectedType = MessageType.status;
+                              selectedPriority = MessagePriority.low;
+                            });
+                          }
+                        },
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  const Text(
+                    'PRIORITY LEVEL',
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.textMuted),
+                  ),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 8,
+                    children: [
+                      ChoiceChip(
+                        label: const Text('Critical'),
+                        selected: selectedPriority == MessagePriority.critical,
+                        selectedColor: AppTheme.sosRed.withValues(alpha: 0.3),
+                        onSelected: (val) {
+                          if (val) setSheetState(() => selectedPriority = MessagePriority.critical);
+                        },
+                      ),
+                      ChoiceChip(
+                        label: const Text('High'),
+                        selected: selectedPriority == MessagePriority.high,
+                        selectedColor: AppTheme.alertAmber.withValues(alpha: 0.3),
+                        onSelected: (val) {
+                          if (val) setSheetState(() => selectedPriority = MessagePriority.high);
+                        },
+                      ),
                       ChoiceChip(
                         label: const Text('Normal'),
                         selected: selectedPriority == MessagePriority.normal,
@@ -76,24 +156,16 @@ class _MessagesScreenState extends State<MessagesScreen> {
                         },
                       ),
                       ChoiceChip(
-                        label: const Text('Urgent Hazard'),
-                        selected: selectedPriority == MessagePriority.high,
-                        selectedColor: AppTheme.alertAmber.withValues(alpha: 0.3),
+                        label: const Text('Low'),
+                        selected: selectedPriority == MessagePriority.low,
+                        selectedColor: AppTheme.textMuted.withValues(alpha: 0.3),
                         onSelected: (val) {
-                          if (val) setSheetState(() => selectedPriority = MessagePriority.high);
-                        },
-                      ),
-                      ChoiceChip(
-                        label: const Text('Critical SOS'),
-                        selected: selectedPriority == MessagePriority.critical,
-                        selectedColor: AppTheme.sosRed.withValues(alpha: 0.3),
-                        onSelected: (val) {
-                          if (val) setSheetState(() => selectedPriority = MessagePriority.critical);
+                          if (val) setSheetState(() => selectedPriority = MessagePriority.low);
                         },
                       ),
                     ],
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 14),
                   TextField(
                     controller: textController,
                     maxLines: 4,
@@ -114,19 +186,20 @@ class _MessagesScreenState extends State<MessagesScreen> {
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton.icon(
-                      icon: const Icon(Icons.send_rounded),
-                      label: const Text('ENQUEUE IN OFFLINE DTN'),
+                      icon: const Icon(Icons.save_alt_rounded),
+                      label: const Text('STORE IN LOCAL SQLITE DTN'),
                       onPressed: () {
                         final content = textController.text.trim();
                         if (content.isEmpty) return;
                         Navigator.of(ctx).pop();
                         context.read<MessageManager>().sendMessage(
                           content: content,
+                          messageType: selectedType,
                           priority: selectedPriority,
                         );
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
-                            content: Text('Message saved to offline DTN store-and-forward queue.'),
+                            content: Text('Message saved to local persistent SQLite storage.'),
                             backgroundColor: AppTheme.cardBackground,
                           ),
                         );
@@ -148,25 +221,53 @@ class _MessagesScreenState extends State<MessagesScreen> {
     final allMessages = manager.messages;
 
     final filteredMessages = allMessages.where((m) {
-      if (_selectedFilterIndex == 1) return m.isSos;
-      if (_selectedFilterIndex == 2) return m.status == MessageStatus.queued;
+      if (_selectedFilterIndex == 1) return m.messageType == MessageType.sos || m.isSos;
+      if (_selectedFilterIndex == 2) return m.messageType == MessageType.hazard;
+      if (_selectedFilterIndex == 3) return m.messageType == MessageType.info;
+      if (_selectedFilterIndex == 4) return m.messageType == MessageType.status;
+      if (_selectedFilterIndex == 5) return m.status == MessageStatus.stored || m.status == MessageStatus.queued;
       return true;
     }).toList();
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Emergency Messages'),
+        actions: [
+          IconButton(
+            tooltip: 'Create Test Emergency SOS',
+            icon: const Icon(Icons.add_alert_rounded, color: AppTheme.sosRed),
+            onPressed: () async {
+              await manager.createTestMessage();
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Created test SOS message in local SQLite storage.'),
+                    backgroundColor: AppTheme.cardBackground,
+                  ),
+                );
+              }
+            },
+          ),
+        ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(48),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-            child: Row(
+          child: SizedBox(
+            height: 44,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
               children: [
                 _buildFilterChip(0, 'All (${allMessages.length})'),
                 const SizedBox(width: 8),
-                _buildFilterChip(1, 'SOS (${allMessages.where((m) => m.isSos).length})'),
+                _buildFilterChip(1, 'SOS (${allMessages.where((m) => m.messageType == MessageType.sos || m.isSos).length})'),
                 const SizedBox(width: 8),
-                _buildFilterChip(2, 'Queued (${allMessages.where((m) => m.status == MessageStatus.queued).length})'),
+                _buildFilterChip(2, 'Hazard (${allMessages.where((m) => m.messageType == MessageType.hazard).length})'),
+                const SizedBox(width: 8),
+                _buildFilterChip(3, 'Info (${allMessages.where((m) => m.messageType == MessageType.info).length})'),
+                const SizedBox(width: 8),
+                _buildFilterChip(4, 'Status (${allMessages.where((m) => m.messageType == MessageType.status).length})'),
+                const SizedBox(width: 8),
+                _buildFilterChip(5, 'Stored (${allMessages.where((m) => m.status == MessageStatus.stored || m.status == MessageStatus.queued).length})'),
               ],
             ),
           ),
@@ -181,21 +282,31 @@ class _MessagesScreenState extends State<MessagesScreen> {
       ),
       body: filteredMessages.isEmpty
           ? Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.chat_bubble_outline_rounded, size: 48, color: AppTheme.textMuted),
-                  const SizedBox(height: 12),
-                  const Text(
-                    'No messages in this filter',
-                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: AppTheme.textSecondary),
-                  ),
-                  const SizedBox(height: 4),
-                  const Text(
-                    'Offline messages are stored and forwarded when nodes meet.',
-                    style: TextStyle(fontSize: 12, color: AppTheme.textMuted),
-                  ),
-                ],
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 32),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.chat_bubble_outline_rounded, size: 48, color: AppTheme.textMuted),
+                    const SizedBox(height: 12),
+                    const Text(
+                      'No Messages in Storage',
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: AppTheme.textSecondary),
+                    ),
+                    const SizedBox(height: 6),
+                    const Text(
+                      'ResQMesh stores all emergency messages in local SQLite offline. Use Compose or the Test SOS button above to create a message.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 12, color: AppTheme.textMuted, height: 1.4),
+                    ),
+                    const SizedBox(height: 20),
+                    OutlinedButton.icon(
+                      icon: const Icon(Icons.add_alert_rounded, color: AppTheme.sosRed, size: 18),
+                      label: const Text('Generate Test SOS Message', style: TextStyle(color: AppTheme.sosRed)),
+                      onPressed: () => manager.createTestMessage(),
+                    ),
+                  ],
+                ),
               ),
             )
           : ListView.builder(
