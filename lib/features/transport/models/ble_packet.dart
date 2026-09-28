@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 import '../../../core/constants/app_constants.dart';
+import '../../mesh/models/emergency_type.dart';
 
 /// Discriminator for BLE wire packets.
 enum BlePacketType {
@@ -38,15 +39,17 @@ class BleAckPacket {
   final String messageId;
   final String ackNodeId;
   final DateTime timestamp;
+  final AckType ackType;
 
   BleAckPacket({
     this.protocolVersion = AppConstants.protocolVersion,
     required this.messageId,
     required this.ackNodeId,
     DateTime? timestamp,
+    this.ackType = AckType.peerAck,
   }) : timestamp = (timestamp ?? DateTime.now().toUtc()).toUtc();
 
   @override
   String toString() =>
-      'BleAckPacket(msgId: $messageId, from: $ackNodeId, at: $timestamp)';
+      'BleAckPacket(msgId: $messageId, from: $ackNodeId, type: ${ackType.displayName}, at: $timestamp)';
 }

@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import '../../../core/constants/app_constants.dart';
 import '../../discovery/ble_advertisement_codec.dart';
 import '../../identity/models/node_role.dart';
+import '../../mesh/models/emergency_type.dart';
 import '../../mesh/models/mesh_message.dart';
 
 /// Exceptions thrown during wire message validation.
@@ -34,6 +35,8 @@ class BleMessageWireFormat {
       'hop': message.hopCount,
       'max': message.maxHops,
       'role': message.createdByRole.name,
+      'etype': message.emergencyType.name,
+      if (message.ackType != null) 'ackt': message.ackType!.name,
     };
 
     final jsonStr = jsonEncode(map);
@@ -69,6 +72,8 @@ class BleMessageWireFormat {
       final hopCount = map['hop'] as int? ?? 0;
       final maxHops = map['max'] as int? ?? 5;
       final roleStr = map['role'] as String? ?? NodeRole.civilian.name;
+      final etypeStr = map['etype'] as String?;
+      final acktStr = map['ackt'] as String?;
 
       if (messageId.isEmpty || origin.isEmpty || payload.isEmpty) {
         return null;
@@ -122,6 +127,8 @@ class BleMessageWireFormat {
         maxHops: maxHops,
         status: MessageStatus.received,
         createdByRole: role,
+        emergencyType: EmergencyType.fromString(etypeStr),
+        ackType: acktStr != null ? AckType.fromString(acktStr) : null,
       );
     } catch (_) {
       // Never crash on malformed data

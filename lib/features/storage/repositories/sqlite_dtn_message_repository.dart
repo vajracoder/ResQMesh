@@ -7,7 +7,7 @@ import 'dtn_message_repository.dart';
 
 /// SQLite implementation of [DtnMessageRepository] for local offline DTN message persistence.
 class SqliteDtnMessageRepository implements DtnMessageRepository {
-  static const int databaseVersion = 2;
+  static const int databaseVersion = 3;
   static const String databaseName = 'resqmesh_dtn.db';
   static const String tableName = 'dtn_messages';
 
@@ -55,6 +55,10 @@ class SqliteDtnMessageRepository implements DtnMessageRepository {
             if (oldVersion < 2) {
               await db.execute('ALTER TABLE $tableName ADD COLUMN forwarding_history TEXT');
             }
+            if (oldVersion < 3) {
+              await db.execute('ALTER TABLE $tableName ADD COLUMN emergency_type TEXT');
+              await db.execute('ALTER TABLE $tableName ADD COLUMN ack_type TEXT');
+            }
           },
         ),
       );
@@ -83,7 +87,9 @@ class SqliteDtnMessageRepository implements DtnMessageRepository {
         retry_count INTEGER NOT NULL DEFAULT 0,
         last_forwarded_at INTEGER,
         created_by_role TEXT NOT NULL,
-        forwarding_history TEXT
+        forwarding_history TEXT,
+        emergency_type TEXT,
+        ack_type TEXT
       )
     ''');
 

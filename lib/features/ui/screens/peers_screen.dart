@@ -9,8 +9,35 @@ import '../../mesh/message_manager.dart';
 import '../../mesh/models/peer_node.dart';
 import '../../transport/ble_transport.dart';
 
-class PeersScreen extends StatelessWidget {
+class PeersScreen extends StatefulWidget {
   const PeersScreen({super.key});
+
+  @override
+  State<PeersScreen> createState() => _PeersScreenState();
+}
+
+class _PeersScreenState extends State<PeersScreen> with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) context.read<BleDiscoveryService?>()?.startDiscovery();
+    });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      context.read<BleDiscoveryService?>()?.startDiscovery();
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
 
   String _formatLastSeen(DateTime lastSeen) {
     final diff = DateTime.now().toUtc().difference(lastSeen).inSeconds;
@@ -85,33 +112,92 @@ class PeersScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 14),
 
-                // Status Indicators Row
-                Row(
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
                   children: [
-                    // Bluetooth Status
-                    Expanded(
+                    SizedBox(
+                      width: 155,
                       child: _buildStatusPill(
                         label: 'Bluetooth',
                         value: isAndroid
-                            ? (isBluetoothOn ? 'ON' : 'OFF')
+                            ? (isBluetoothOn ? '✓ Enabled' : '✕ Disabled')
                             : 'SUPPORTED ON ANDROID',
                         isActive: isAndroid && isBluetoothOn,
                         activeColor: AppTheme.activeGreen,
                       ),
                     ),
-                    const SizedBox(width: 8),
-
-                    // Discovery Status
-                    Expanded(
+                    SizedBox(
+                      width: 155,
                       child: _buildStatusPill(
-                        label: 'Discovery',
-                        value: isScanning ? 'SCANNING' : 'IDLE',
-                        isActive: isScanning,
+                        label: 'Nearby Devices Permission',
+                        value: bleService?.nearbyPermissionsGranted == true ? '✓ Granted' : '✕ Missing',
+                        isActive: bleService?.nearbyPermissionsGranted == true,
+                        activeColor: AppTheme.activeGreen,
+                      ),
+                    ),
+                    if (bleService?.locationServiceRequired == true)
+                      SizedBox(
+                        width: 155,
+                        child: _buildStatusPill(
+                          label: 'Location Requirement',
+                          value: bleService!.locationServiceEnabled ? '✓ Enabled' : '✕ Required',
+                          isActive: bleService.locationServiceEnabled,
+                          activeColor: AppTheme.activeGreen,
+                        ),
+                      ),
+                    SizedBox(
+                      width: 155,
+                      child: _buildStatusPill(
+                        label: 'BLE Scanner',
+                        value: bleService?.isScanning == true ? '✓ Running' : '✕ Not Running',
+                        isActive: bleService?.isScanning == true,
+                        activeColor: AppTheme.meshCyan,
+                      ),
+                    ),
+                    SizedBox(
+                      width: 155,
+                      child: _buildStatusPill(
+                        label: 'BLE Advertiser',
+                        value: bleService?.isAdvertising == true ? '✓ Running' : '✕ Not Running',
+                        isActive: bleService?.isAdvertising == true,
                         activeColor: AppTheme.meshCyan,
                       ),
                     ),
                   ],
                 ),
+
+                const SizedBox(height: 12),
+                Text(
+                  'Nearby ResQMesh Devices: ${bleService?.peerCount ?? peers.length}',
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppTheme.textSecondary),
+                ),
+
+                if (isAndroid && !isBluetoothOn) ...[
+                  const SizedBox(height: 12),
+                  FilledButton.icon(
+                    onPressed: () => bleService?.turnOnBluetooth(),
+                    icon: const Icon(Icons.bluetooth_rounded),
+                    label: const Text('Turn On Bluetooth'),
+                  ),
+                ],
+                if (bleService?.hasPermanentlyDeniedPermission == true) ...[
+                  const SizedBox(height: 12),
+                  OutlinedButton.icon(
+                    onPressed: () => bleService?.openSettings(),
+                    icon: const Icon(Icons.settings_outlined),
+                    label: const Text('Open Settings'),
+                  ),
+                ],
+                if (bleService?.locationServiceRequired == true &&
+                    bleService?.locationServiceEnabled == false) ...[
+                  const SizedBox(height: 12),
+                  OutlinedButton.icon(
+                    onPressed: () => bleService?.openLocationSettings(),
+                    icon: const Icon(Icons.location_on_outlined),
+                    label: const Text('Open Location Settings'),
+                  ),
+                ],
 
                 if (!isAndroid) ...[
                   const SizedBox(height: 12),

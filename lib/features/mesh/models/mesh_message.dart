@@ -1,6 +1,7 @@
 import 'dart:convert';
 import '../../identity/models/node_role.dart';
 import '../../routing/models/forwarding_record.dart';
+import 'emergency_type.dart';
 
 /// Categories of emergency mesh messages supported by ResQMesh.
 enum MessageType {
@@ -54,6 +55,8 @@ class MeshMessage {
   final DateTime? lastForwardedAt;
   final NodeRole createdByRole;
   final List<ForwardingRecord> forwardingHistory;
+  final EmergencyType emergencyType;
+  final AckType? ackType;
 
   MeshMessage({
     String? messageId,
@@ -73,6 +76,8 @@ class MeshMessage {
     this.lastForwardedAt,
     this.createdByRole = NodeRole.civilian,
     List<ForwardingRecord>? forwardingHistory,
+    EmergencyType? emergencyType,
+    this.ackType,
     // Step 1 backwards-compatibility alias parameters:
     String? id,
     String? senderId,
@@ -89,6 +94,7 @@ class MeshMessage {
         expiresAt = (expiresAt ?? (createdAt ?? timestamp ?? DateTime.now().toUtc()).add(Duration(seconds: ttl ?? 86400))).toUtc(),
         priority = priority ?? MessagePriority.normal,
         messageType = messageType ?? ((priority == MessagePriority.critical) ? MessageType.sos : MessageType.info),
+        emergencyType = emergencyType ?? ((messageType == MessageType.sos || priority == MessagePriority.critical) ? EmergencyType.sos : EmergencyType.info),
         forwardingHistory = forwardingHistory != null ? List.unmodifiable(forwardingHistory) : const [];
 
   // Backward compatibility getters for Step 1 UI & tests
@@ -99,7 +105,7 @@ class MeshMessage {
   DateTime get timestamp => createdAt;
 
   bool get isBroadcast => destinationNodeId == '*' || destinationNodeId.isEmpty;
-  bool get isSos => messageType == MessageType.sos || priority == MessagePriority.critical;
+  bool get isSos => messageType == MessageType.sos || priority == MessagePriority.critical || emergencyType.isHighUrgency;
 
   /// Returns true if this message has already visited the given [nodeId],
   /// preventing routing loops.
@@ -132,6 +138,8 @@ class MeshMessage {
     DateTime? lastForwardedAt,
     NodeRole? createdByRole,
     List<ForwardingRecord>? forwardingHistory,
+    EmergencyType? emergencyType,
+    AckType? ackType,
     // Legacy parameter aliases
     String? id,
     String? senderId,
@@ -157,6 +165,8 @@ class MeshMessage {
       lastForwardedAt: lastForwardedAt ?? this.lastForwardedAt,
       createdByRole: createdByRole ?? this.createdByRole,
       forwardingHistory: forwardingHistory ?? this.forwardingHistory,
+      emergencyType: emergencyType ?? this.emergencyType,
+      ackType: ackType ?? this.ackType,
     );
   }
 
@@ -180,6 +190,8 @@ class MeshMessage {
       'last_forwarded_at': lastForwardedAt?.millisecondsSinceEpoch,
       'created_by_role': createdByRole.name,
       'forwarding_history': jsonEncode(forwardingHistory.map((r) => r.toMap()).toList()),
+      'emergency_type': emergencyType.name,
+      'ack_type': ackType?.name,
     };
   }
 
@@ -229,6 +241,8 @@ class MeshMessage {
         orElse: () => NodeRole.civilian,
       ),
       forwardingHistory: history,
+      emergencyType: EmergencyType.fromString(map['emergency_type'] as String?),
+      ackType: map['ack_type'] != null ? AckType.fromString(map['ack_type'] as String) : null,
     );
   }
 
@@ -257,6 +271,8 @@ class MeshMessage {
       'lastForwardedAt': lastForwardedAt?.toIso8601String(),
       'createdByRole': createdByRole.name,
       'forwardingHistory': forwardingHistory.map((r) => r.toMap()).toList(),
+      'emergencyType': emergencyType.name,
+      'ackType': ackType?.name,
     };
   }
 
@@ -316,6 +332,8 @@ class MeshMessage {
         orElse: () => NodeRole.civilian,
       ),
       forwardingHistory: history,
+      emergencyType: EmergencyType.fromString(map['emergencyType'] as String?),
+      ackType: map['ackType'] != null ? AckType.fromString(map['ackType'] as String) : null,
     );
   }
 }

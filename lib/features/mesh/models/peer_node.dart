@@ -1,4 +1,5 @@
 import '../../../core/constants/app_constants.dart';
+import '../../identity/models/node_role.dart';
 
 /// State of local peer-to-peer BLE connection (Step 5).
 enum PeerConnectionState {
@@ -25,6 +26,8 @@ class PeerNode {
   final bool isResQMeshPeer;
   final bool isDirectNeighbor;
   final String? deviceAddress; // Bluetooth MAC or system identifier for GATT connection
+  final NodeRole role;
+  final bool isGateway;
 
   PeerNode({
     String? nodeId,
@@ -36,6 +39,8 @@ class PeerNode {
     this.isResQMeshPeer = true,
     this.isDirectNeighbor = true,
     this.deviceAddress,
+    this.role = NodeRole.civilian,
+    this.isGateway = false,
     // Step 1 backwards-compatibility alias parameters:
     String? id,
     String? name,
@@ -71,6 +76,8 @@ class PeerNode {
     bool? isResQMeshPeer,
     bool? isDirectNeighbor,
     String? deviceAddress,
+    NodeRole? role,
+    bool? isGateway,
     // Legacy parameter aliases
     String? id,
     String? name,
@@ -85,6 +92,8 @@ class PeerNode {
       isResQMeshPeer: isResQMeshPeer ?? this.isResQMeshPeer,
       isDirectNeighbor: isDirectNeighbor ?? this.isDirectNeighbor,
       deviceAddress: deviceAddress ?? this.deviceAddress,
+      role: role ?? this.role,
+      isGateway: isGateway ?? this.isGateway,
     );
   }
 
@@ -101,6 +110,8 @@ class PeerNode {
       'isResQMeshPeer': isResQMeshPeer,
       'isDirectNeighbor': isDirectNeighbor,
       'deviceAddress': deviceAddress,
+      'role': role.name,
+      'isGateway': isGateway,
     };
   }
 
@@ -118,6 +129,11 @@ class PeerNode {
       isResQMeshPeer: map['isResQMeshPeer'] as bool? ?? true,
       isDirectNeighbor: map['isDirectNeighbor'] as bool? ?? true,
       deviceAddress: map['deviceAddress'] as String?,
+      role: NodeRole.values.firstWhere(
+        (r) => r.name == map['role'],
+        orElse: () => NodeRole.civilian,
+      ),
+      isGateway: map['isGateway'] as bool? ?? false,
     );
   }
 }

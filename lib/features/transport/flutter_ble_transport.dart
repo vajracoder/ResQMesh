@@ -257,10 +257,12 @@ class FlutterBleTransport extends BleTransport {
           for (final char in service.characteristics) {
             final charUuid = char.uuid.toString().toLowerCase();
             if (charUuid == AppConstants.bleCharacteristicTxUuid.toLowerCase()) {
-              rxChar = char; // Central writes to TX/RX
+              // Peripheral TX is the central's notification characteristic.
+              txChar = char;
             }
             if (charUuid == AppConstants.bleCharacteristicRxUuid.toLowerCase()) {
-              txChar = char; // Central receives notifications
+              // Peripheral RX is writable by the central.
+              rxChar = char;
             }
           }
         }
@@ -391,6 +393,7 @@ class FlutterBleTransport extends BleTransport {
   }
 
   void _updatePeerState(PeerNode peer, PeerConnectionState state) {
+    debugPrint('[ResQMesh][BLE] connection state; peer: ${peer.nodeId}; state: $state');
     _peerStates[peer.nodeId] = state;
     final updated = peer.copyWith(connectionState: state);
     _peerConnectionController.add(updated);

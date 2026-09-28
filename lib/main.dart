@@ -9,10 +9,16 @@ import 'core/constants/app_constants.dart';
 import 'core/theme/app_theme.dart';
 import 'features/decision/basic_decision_engine.dart';
 import 'features/discovery/ble_discovery_service.dart';
+import 'features/gateway/gateway_inbox_service.dart';
 import 'features/identity/repositories/shared_prefs_node_identity_repository.dart';
 import 'features/identity/services/node_identity_service.dart';
 import 'features/mesh/message_manager.dart';
+import 'features/responder/emergency_handoff_service.dart';
+import 'features/responder/responder_service.dart';
 import 'features/routing/ble_dtn_router.dart';
+import 'features/routing/intelligent_routing_engine.dart';
+import 'features/routing/logging/routing_event_log.dart';
+import 'features/routing/metrics/routing_research_metrics.dart';
 import 'features/routing/models/relay_metrics.dart';
 import 'features/storage/repositories/dtn_message_repository.dart';
 import 'features/storage/repositories/sqlite_dtn_message_repository.dart';
@@ -74,11 +80,28 @@ Future<void> main() async {
     debugPrint('ResQMesh: Initial BLE transport notice: $e');
   }
 
-  // Initialize Core Path components (Step 1 + Step 5 BleDtnRouter)
+  // Initialize Step 7: Intelligent Emergency DTN Routing Engine
+  final routingEventLog = RoutingEventLog();
+  final routingResearchMetrics = RoutingResearchMetrics();
+
+  final intelligentEngine = IntelligentRoutingEngine(
+    eventLog: routingEventLog,
+    metrics: routingResearchMetrics,
+  );
+
+  // Initialize Step 8: Responder Triage & Gateway Handoff Integration
+  final emergencyHandoffService = LocalEmergencyHandoffService();
+  final responderService = ResponderService(repository: messageRepository);
+  final gatewayInboxService = GatewayInboxService(
+    repository: messageRepository,
+    handoffService: emergencyHandoffService,
+  );
+
   final decisionEngine = BasicDecisionEngine();
   final dtnRouter = BleDtnRouter(
     transport: bleTransport,
     messageRepository: messageRepository,
+    decisionEngine: intelligentEngine,
   );
 
   final messageManager = MessageManager(
@@ -88,6 +111,9 @@ Future<void> main() async {
     transport: bleTransport,
     identityService: identityService,
     messageRepository: messageRepository,
+    responderService: responderService,
+    gatewayInboxService: gatewayInboxService,
+    routingMetrics: routingResearchMetrics,
   );
 
   try {
@@ -104,6 +130,12 @@ Future<void> main() async {
         ChangeNotifierProvider<BleTransport>.value(value: bleTransport),
         ChangeNotifierProvider<MessageManager>.value(value: messageManager),
         ChangeNotifierProvider<RelayMetrics>.value(value: messageManager.relayMetrics),
+        ChangeNotifierProvider<RoutingResearchMetrics>.value(value: routingResearchMetrics),
+        ChangeNotifierProvider<RoutingEventLog>.value(value: routingEventLog),
+        ChangeNotifierProvider<EmergencyHandoffService>.value(value: emergencyHandoffService),
+        ChangeNotifierProvider<ResponderService>.value(value: responderService),
+        ChangeNotifierProvider<GatewayInboxService>.value(value: gatewayInboxService),
+        Provider<IntelligentRoutingEngine>.value(value: intelligentEngine),
         Provider<DtnMessageRepository>.value(value: messageRepository),
       ],
       child: const ResQMeshApp(),

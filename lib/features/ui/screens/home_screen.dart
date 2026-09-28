@@ -5,6 +5,7 @@ import '../../mesh/message_manager.dart';
 import '../widgets/emergency_header.dart';
 import '../widgets/message_card.dart';
 import '../widgets/status_card.dart';
+import 'emergency_composer_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -171,6 +172,22 @@ class HomeScreen extends StatelessWidget {
                       fontWeight: FontWeight.w700,
                       color: AppTheme.textMuted,
                       letterSpacing: 0.6,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Center(
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => const EmergencyComposerScreen()),
+                      );
+                    },
+                    icon: const Icon(Icons.emergency_outlined, size: 18),
+                    label: const Text('CLASSIFIED EMERGENCY COMPOSER', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.redAccent,
+                      side: const BorderSide(color: Colors.redAccent),
                     ),
                   ),
                 ),

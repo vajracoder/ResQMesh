@@ -8,8 +8,10 @@ import 'package:provider/provider.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../discovery/ble_discovery_service.dart';
+import '../../identity/models/node_role.dart';
 import '../../identity/services/node_identity_service.dart';
 import '../../mesh/message_manager.dart';
+import '../../routing/metrics/routing_research_metrics.dart';
 import '../../routing/models/relay_metrics.dart';
 
 /// Screen detailing the ResQMesh system status, persistent Node Identity,
@@ -121,6 +123,7 @@ class DiagnosticsScreen extends StatelessWidget {
     final identityService = context.watch<NodeIdentityService>();
     final bleService = context.watch<BleDiscoveryService?>();
     final relayMetrics = context.watch<RelayMetrics?>() ?? manager.relayMetrics;
+    final routingMetrics = context.watch<RoutingResearchMetrics?>();
     final identity = identityService.identity;
 
     final isAndroid = !kIsWeb && Platform.isAndroid;
@@ -151,9 +154,9 @@ class DiagnosticsScreen extends StatelessWidget {
         icon: Icons.alt_route_rounded,
       ),
       const _ArchStep(
-        title: 'Decision Engine',
-        subtitle: 'Priority admission, TTL enforcement & battery optimization',
-        status: 'Contract Ready (Step 8)',
+        title: 'Decision Engine & Routing',
+        subtitle: 'Priority admission, TTL enforcement & emergency-aware routing',
+        status: 'Active (Step 7/8)',
         isActive: true,
         icon: Icons.psychology_outlined,
       ),
@@ -911,6 +914,199 @@ class DiagnosticsScreen extends StatelessWidget {
                       ),
                     ),
                   ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 24),
+
+          // Step 8: Responder & Gateway Integration Status
+          const Text(
+            'RESPONDER & GATEWAY INTEGRATION (STEP 8)',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.8,
+              color: AppTheme.textMuted,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppTheme.cardBackground,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: Colors.teal.shade800.withValues(alpha: 0.6)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.teal.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(Icons.shield_outlined, color: Colors.tealAccent, size: 20),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Active Node Role',
+                            style: TextStyle(fontSize: 12, color: AppTheme.textMuted),
+                          ),
+                          Text(
+                            identity?.role.displayName ?? 'Civilian',
+                            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.tealAccent),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.amber.shade900.withValues(alpha: 0.25),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: Colors.amber.shade700),
+                      ),
+                      child: const Text(
+                        'EXTERNAL: NOT CONNECTED',
+                        style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.amber),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+
+                // Dynamic Role Switching for Testing & Field Configuration
+                const Text(
+                  'Switch Node Role (Persisted Identity):',
+                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textSecondary),
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: NodeRole.values.map((role) {
+                    final isCurrent = identity?.role == role;
+                    return ChoiceChip(
+                      label: Text(role.displayName, style: TextStyle(fontSize: 11, color: isCurrent ? Colors.white : AppTheme.textMuted)),
+                      selected: isCurrent,
+                      selectedColor: Colors.teal.shade800,
+                      onSelected: (sel) {
+                        if (sel) {
+                          identityService.updateRole(role);
+                          if (role == NodeRole.gateway) {
+                            identityService.updateGatewayStatus(true);
+                          } else {
+                            identityService.updateGatewayStatus(false);
+                          }
+                        }
+                      },
+                    );
+                  }).toList(),
+                ),
+                const SizedBox(height: 16),
+                const Divider(color: AppTheme.cardBorder),
+                const SizedBox(height: 10),
+
+                // Emergency DTN Telemetry
+                const Text(
+                  'Emergency DTN Telemetry (Step 8):',
+                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppTheme.textSecondary),
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildMetricTile(
+                        label: 'Emergencies Created',
+                        value: '${routingMetrics?.emergenciesCreated ?? 0}',
+                        color: Colors.redAccent,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _buildMetricTile(
+                        label: 'Responder Receipts',
+                        value: '${routingMetrics?.emergenciesReceivedByResponder ?? 0}',
+                        color: Colors.tealAccent,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildMetricTile(
+                        label: 'Gateway Receipts',
+                        value: '${routingMetrics?.gatewayReceipts ?? 0}',
+                        color: Colors.indigoAccent,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _buildMetricTile(
+                        label: 'Responder ACKs',
+                        value: '${routingMetrics?.responderAcknowledgements ?? 0}',
+                        color: Colors.greenAccent,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildMetricTile(
+                        label: 'Emergency Relays',
+                        value: '${routingMetrics?.emergencyRelayCount ?? 0}',
+                        color: Colors.cyanAccent,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _buildMetricTile(
+                        label: 'Expired Emergencies',
+                        value: '${routingMetrics?.emergencyExpirationCount ?? 0}',
+                        color: Colors.orangeAccent,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+
+                // Role Prioritization Scoring Info
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0F141C),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: AppTheme.cardBorder),
+                  ),
+                  child: const Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Role-Based DTN Routing Bonuses (Step 8)',
+                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+                      ),
+                      SizedBox(height: 4),
+                      Text(
+                        '• Responder Peer Candidate Bonus: +25.0 utility pts\n'
+                        '• Gateway Peer Candidate Bonus: +20.0 utility pts\n'
+                        '• Distinct ACK Semantics: PEER_ACK / RESPONDER_ACK / GATEWAY_ACK\n'
+                        '• Handoff Buffer State: Ready for physical/radio dispatch',
+                        style: TextStyle(fontSize: 10, color: AppTheme.textMuted, height: 1.4),
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),

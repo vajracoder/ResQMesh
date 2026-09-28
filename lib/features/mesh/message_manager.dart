@@ -4,16 +4,20 @@ import 'package:uuid/uuid.dart';
 
 import '../decision/decision_engine_interface.dart';
 import '../discovery/peer_discovery_interface.dart';
+import '../gateway/gateway_inbox_service.dart';
 import '../identity/models/node_role.dart';
 import '../identity/services/node_identity_service.dart';
+import '../responder/responder_service.dart';
 import '../routing/ble_dtn_router.dart';
 import '../routing/dtn_router_interface.dart';
+import '../routing/metrics/routing_research_metrics.dart';
 import '../routing/models/relay_metrics.dart';
 import '../routing/relay_scheduler.dart';
 import '../storage/repositories/dtn_message_repository.dart';
 import '../transport/ble_transport.dart';
 import '../transport/codecs/ble_message_wire_format.dart';
 import '../transport/models/ble_packet.dart';
+import 'models/emergency_type.dart';
 import 'models/mesh_message.dart';
 import 'models/peer_node.dart';
 
@@ -28,6 +32,9 @@ class MessageManager extends ChangeNotifier {
   final DtnMessageRepository? messageRepository;
   final RelayScheduler? relayScheduler;
   final RelayMetrics relayMetrics;
+  final ResponderService? responderService;
+  final GatewayInboxService? gatewayInboxService;
+  final RoutingResearchMetrics? routingMetrics;
   final String _localNodeId;
   final _uuid = const Uuid();
 
@@ -47,6 +54,9 @@ class MessageManager extends ChangeNotifier {
     this.identityService,
     this.messageRepository,
     this.relayScheduler,
+    this.responderService,
+    this.gatewayInboxService,
+    this.routingMetrics,
     RelayMetrics? relayMetrics,
     String? localNodeId,
   })  : _localNodeId = localNodeId ?? 'node-local-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}',
@@ -120,12 +130,28 @@ class MessageManager extends ChangeNotifier {
       await messageRepository!.createMessage(receivedMessage);
     }
 
-    // 4. Admit to local memory and notify UI
+    // 4. Role-specific ingestion and Step 8 telemetry
+    final role = identityService?.identity?.role ?? NodeRole.civilian;
+    final isGateway = identityService?.identity?.isGateway ?? false;
+
+    if (role == NodeRole.responder || role == NodeRole.command) {
+      responderService?.ingestEmergency(receivedMessage);
+      if (receivedMessage.isSos || receivedMessage.emergencyType.isHighUrgency) {
+        routingMetrics?.recordEmergencyReceivedByResponder();
+      }
+    }
+
+    if (role == NodeRole.gateway || isGateway) {
+      gatewayInboxService?.ingestMessage(receivedMessage);
+      routingMetrics?.recordGatewayReceipt();
+    }
+
+    // 5. Admit to local memory and notify UI
     _messages.insert(0, receivedMessage);
     relayMetrics.recordStored();
     notifyListeners();
 
-    // 5. Multi-hop DTN Store-and-Forward relay:
+    // 6. Multi-hop DTN Store-and-Forward relay:
     // If broadcast or destined for another node, enqueue for relay to further nodes
     if (receivedMessage.isBroadcast || receivedMessage.destinationNodeId != localNodeId) {
       final scheduler = _effectiveScheduler;
@@ -143,7 +169,10 @@ class MessageManager extends ChangeNotifier {
     final index = _messages.indexWhere((m) => m.messageId == ack.messageId);
     if (index != -1) {
       final current = _messages[index];
-      final updated = current.copyWith(status: MessageStatus.deliveredToPeer);
+      final updated = current.copyWith(
+        status: MessageStatus.deliveredToPeer,
+        ackType: ack.ackType,
+      );
       _messages[index] = updated;
       if (messageRepository != null) {
         await messageRepository!.updateMessageStatus(
@@ -153,6 +182,11 @@ class MessageManager extends ChangeNotifier {
       }
       _effectiveScheduler?.recordAck(ack.messageId, ack.ackNodeId);
       relayMetrics.recordDelivered();
+
+      if (ack.ackType == AckType.responderAck) {
+        routingMetrics?.recordResponderAck();
+      }
+
       notifyListeners();
     }
   }
@@ -190,10 +224,14 @@ class MessageManager extends ChangeNotifier {
   bool get isStorageReady => _isStorageInitialized || messageRepository != null;
 
   /// Trigger emergency SOS broadcast to all reachable nodes.
-  Future<MeshMessage> sendEmergencySos({required String details}) async {
+  Future<MeshMessage> sendEmergencySos({
+    required String details,
+    EmergencyType emergencyType = EmergencyType.sos,
+  }) async {
     return sendMessage(
       content: details.isEmpty ? 'EMERGENCY SOS: Immediate assistance required!' : 'EMERGENCY SOS: $details',
       messageType: MessageType.sos,
+      emergencyType: emergencyType,
       priority: MessagePriority.critical,
       recipientId: '*', // Broadcast to all
     );
@@ -204,9 +242,29 @@ class MessageManager extends ChangeNotifier {
     return sendMessage(
       content: '[TEST ONLY] Local DTN Storage Test: ${customNote ?? "Simulated emergency transmission"}',
       messageType: MessageType.sos,
+      emergencyType: EmergencyType.sos,
       priority: MessagePriority.critical,
       recipientId: '*',
     );
+  }
+
+  /// Dispatches an explicit RESPONDER_ACK message back across the mesh to originNodeId.
+  Future<MeshMessage> sendResponderAck({
+    required String targetMessageId,
+    required String originNodeId,
+    String? responderNote,
+  }) async {
+    final note = responderNote ?? 'Responder acknowledged emergency bundle';
+    final ackMessage = await sendMessage(
+      content: 'RESPONDER ACK: $note for message $targetMessageId',
+      messageType: MessageType.info,
+      priority: MessagePriority.high,
+      recipientId: originNodeId,
+      emergencyType: EmergencyType.info,
+      ackType: AckType.responderAck,
+    );
+    routingMetrics?.recordResponderAck();
+    return ackMessage;
   }
 
   /// Send standard, hazard, or priority mesh message.
@@ -216,10 +274,16 @@ class MessageManager extends ChangeNotifier {
     MessagePriority priority = MessagePriority.normal,
     String recipientId = '*',
     int ttl = 86400,
+    EmergencyType? emergencyType,
+    AckType? ackType,
   }) async {
     final now = DateTime.now().toUtc();
     final messageId = 'RQM-MSG-${_uuid.v4()}';
     final role = identityService?.identity?.role ?? NodeRole.civilian;
+    final resolvedEmergencyType = emergencyType ??
+        ((messageType == MessageType.sos || priority == MessagePriority.critical)
+            ? EmergencyType.sos
+            : EmergencyType.info);
 
     final message = MeshMessage(
       messageId: messageId,
@@ -237,7 +301,13 @@ class MessageManager extends ChangeNotifier {
       status: MessageStatus.queued,
       retryCount: 0,
       createdByRole: role,
+      emergencyType: resolvedEmergencyType,
+      ackType: ackType,
     );
+
+    if (message.isSos || resolvedEmergencyType.isHighUrgency) {
+      routingMetrics?.recordEmergencyCreated();
+    }
 
     // 1. Evaluate policy via Decision Engine
     final decision = decisionEngine.evaluateMessage(message);
